@@ -4,8 +4,11 @@ FROM nginx:alpine
 # Remove the default Nginx static assets
 RUN rm -rf /usr/share/nginx/html/*
 
+# Remove any scripts in /docker-entrypoint.d/ to prevent modification attempts
+RUN rm -rf /docker-entrypoint.d/*
+
 # Copy the current directory contents into the Nginx html directory
-COPY /html /usr/share/nginx/html
+COPY html/ /usr/share/nginx/html
 
 # Copy custom Nginx configuration
 COPY nginx.conf /etc/nginx/nginx.conf

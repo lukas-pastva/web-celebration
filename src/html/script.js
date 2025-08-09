@@ -27,7 +27,7 @@ document.addEventListener('DOMContentLoaded', () => {
     deactivateTab(tabCelebrations, viewCelebrations);
   });
 
-  // Theme switching
+  // Theme
   const themeSelect = document.getElementById('themeSelect');
   themeSelect.addEventListener('change', (e) => {
     document.documentElement.setAttribute('data-theme', e.target.value);
@@ -49,8 +49,10 @@ document.addEventListener('DOMContentLoaded', () => {
       const celebrations = Array.isArray(data.celebrations) ? data.celebrations : [];
       const achievements = Array.isArray(data.achievements) ? data.achievements : [];
 
-      // Determine base path for local images
-      const assetsBase = ensureTrailingSlash(typeof data.assets_base_path === 'string' ? data.assets_base_path : '/data/');
+      // Base path for local images (default to /data/)
+      const assetsBase = ensureTrailingSlash(
+        typeof data.assets_base_path === 'string' ? data.assets_base_path : '/data/'
+      );
 
       renderCalendar(celebrations);
       renderAchievements(achievements, assetsBase);
@@ -80,12 +82,15 @@ function renderCalendar(events) {
   const currentYear = today.getFullYear();
 
   const processed = events.map(event => {
-    let [day, month] = String(event.date || '').split('.');
+    let [day, month, year] = String(event.date || '').split('.');
     day = parseInt(day);
     month = parseInt(month) - 1;
+    year = parseInt(year) || currentYear;
+
     let eventDate = new Date(currentYear, month, day);
     if (isNaN(eventDate.getTime())) eventDate = new Date(currentYear, 0, 1);
     else if (eventDate < today) eventDate.setFullYear(currentYear + 1);
+
     return { ...event, eventDate };
   });
 
@@ -122,7 +127,7 @@ function renderCalendar(events) {
   });
 }
 
-// ===== Achievements (top-down + gallery) =====
+// ===== Achievements (auto-gallery by title) =====
 function renderAchievements(items, assetsBase) {
   const container = document.getElementById('achievementsList');
   container.innerHTML = '';
@@ -158,35 +163,91 @@ function renderAchievements(items, assetsBase) {
       card.appendChild(desc);
     }
 
-    // Gallery
+    const gallery = document.createElement('div');
+    gallery.classList.add('gallery');
+    card.appendChild(gallery);
+
+    // Use explicit images if provided, otherwise auto-discover
     if (Array.isArray(a.images) && a.images.length) {
-      const gallery = document.createElement('div');
-      gallery.classList.add('gallery');
+      const resolved = a.images.map(src => resolveImageSrc(src, assetsBase));
+      buildGallery(gallery, resolved, a.title);
+    } else {
+      // Auto-discover: /data/<slugified-title>/
+      const folder = slugify(a.title || `achievement-${idx + 1}`);
+      const dirUrl = ensureTrailingSlash(assetsBase) + folder + '/';
 
-      // Pre-resolve all images for lightbox
-      const resolvedImages = a.images.map(src => resolveImageSrc(src, assetsBase));
+      // Placeholder while loading
+      const placeholder = document.createElement('div');
+      placeholder.textContent = 'Loading images…';
+      placeholder.style.color = 'var(--muted)';
+      placeholder.style.fontSize = '14px';
+      gallery.appendChild(placeholder);
 
-      resolvedImages.forEach((src, i) => {
-        const btn = document.createElement('button');
-        btn.classList.add('thumb');
-        btn.setAttribute('aria-label', `Open image ${i + 1} for ${a.title || 'achievement'}`);
-
-        const img = document.createElement('img');
-        img.loading = 'lazy';
-        img.decoding = 'async';
-        img.src = src;
-        img.alt = `${a.title || 'Achievement'} image ${i + 1}`;
-
-        btn.appendChild(img);
-        btn.addEventListener('click', () => openLightbox(resolvedImages, i));
-        gallery.appendChild(btn);
-      });
-
-      card.appendChild(gallery);
+      listImagesInDir(dirUrl)
+        .then(images => {
+          gallery.innerHTML = '';
+          if (!images.length) {
+            const empty = document.createElement('div');
+            empty.textContent = 'No images found.';
+            empty.style.color = 'var(--muted)';
+            empty.style.fontSize = '14px';
+            gallery.appendChild(empty);
+            return;
+          }
+          buildGallery(gallery, images, a.title);
+        })
+        .catch(() => {
+          gallery.innerHTML = '';
+          const err = document.createElement('div');
+          err.textContent = 'Could not load images.';
+          err.style.color = 'var(--muted)';
+          err.style.fontSize = '14px';
+          gallery.appendChild(err);
+        });
     }
 
     container.appendChild(card);
   });
+}
+
+function buildGallery(container, imageUrls, title = 'Achievement') {
+  const resolvedImages = imageUrls.slice();
+  resolvedImages.forEach((src, i) => {
+    const btn = document.createElement('button');
+    btn.classList.add('thumb');
+    btn.setAttribute('aria-label', `Open image ${i + 1} for ${title}`);
+
+    const img = document.createElement('img');
+    img.loading = 'lazy';
+    img.decoding = 'async';
+    img.src = src;
+    img.alt = `${title} image ${i + 1}`;
+
+    btn.appendChild(img);
+    btn.addEventListener('click', () => openLightbox(resolvedImages, i));
+    container.appendChild(btn);
+  });
+}
+
+// ===== Directory listing fetch & parse =====
+async function listImagesInDir(dirUrl) {
+  // Expecting Nginx autoindex HTML
+  const res = await fetch(dirUrl, { headers: { 'Accept': 'text/html' } });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const html = await res.text();
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  const anchors = Array.from(doc.querySelectorAll('a'));
+  const files = anchors
+    .map(a => a.getAttribute('href') || '')
+    .filter(h => h && !h.endsWith('/')) // skip subfolders and parent links
+    .filter(isImageFile);
+
+  // Convert to absolute URLs relative to dir
+  return files.map(h => new URL(h, dirUrl).toString());
+}
+
+function isImageFile(name) {
+  return /\.(png|jpe?g|webp|gif|bmp|svg)$/i.test(name);
 }
 
 // ===== Chart (XY or fallback) =====
@@ -284,8 +345,14 @@ function ensureTrailingSlash(p) {
 }
 function resolveImageSrc(src, base) {
   if (!src) return '';
-  // Absolute URL or absolute path
-  if (/^([a-z]+:)?\/\//i.test(src) || src.startsWith('/')) return src;
-  // Relative -> prefix base (/data/ by default)
+  if (/^([a-z]+:)?\/\//i.test(src) || src.startsWith('/')) return src; // URL or absolute path
   return ensureTrailingSlash(base) + src.replace(/^\.?\//, '');
+}
+function slugify(str) {
+  return String(str || '')
+    .normalize('NFKD')                 // split diacritics
+    .replace(/[\u0300-\u036f]/g, '')   // remove diacritic marks
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')       // non-alnum -> hyphen
+    .replace(/^-+|-+$/g, '');          // trim hyphens
 }

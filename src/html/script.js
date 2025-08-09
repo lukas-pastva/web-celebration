@@ -279,7 +279,8 @@ function renderAchievements(items, assetsBase) {
       buildGallery(gallery, resolved, a.title);
     } else {
       const folder = slugify(a.title || `achievement-${idx + 1}`);
-      const dirUrl = ensureTrailingSlash(assetsBase) + folder + '/';
+      const manifestUrl = `/_gallery/${folder}.json?t=${Date.now()}`;
+      const dirUrl      = ensureTrailingSlash(assetsBase) + folder + '/';
 
       const placeholder = document.createElement('div');
       placeholder.textContent = 'Loading images…';
@@ -287,7 +288,15 @@ function renderAchievements(items, assetsBase) {
       placeholder.style.fontSize = '14px';
       gallery.appendChild(placeholder);
 
-      listImagesInDir(dirUrl)
+      // Try JSON manifest first (built at startup)
+      fetch(manifestUrl, { cache: 'no-store' })
+        .then(res => res.ok ? res.json() : Promise.reject(new Error(`manifest ${res.status}`)))
+        .then(json => Array.isArray(json.images) ? json.images : [])
+        .catch(() => []) // if manifest missing, fallback to autoindex
+        .then(async (images) => {
+          if (images.length) return images;
+          try { return await listImagesInDir(dirUrl); } catch { return []; }
+        })
         .then(images => {
           gallery.innerHTML = '';
           if (!images.length) {
@@ -300,13 +309,14 @@ function renderAchievements(items, assetsBase) {
           }
           buildGallery(gallery, images, a.title);
         })
-        .catch(() => {
+        .catch(err => {
+          console.error('Gallery load failed:', err);
           gallery.innerHTML = '';
-          const err = document.createElement('div');
-          err.textContent = 'Could not load images.';
-          err.style.color = 'var(--muted)';
-          err.style.fontSize = '14px';
-          gallery.appendChild(err);
+          const e = document.createElement('div');
+          e.textContent = 'Could not load images.';
+          e.style.color = 'var(--muted)';
+          e.style.fontSize = '14px';
+          gallery.appendChild(e);
         });
     }
 

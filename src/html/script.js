@@ -8,16 +8,13 @@ const eventIcons = {
 };
 
 // ===== State for lightbox =====
-let lightboxState = {
-  images: [],
-  index: 0,
-};
+let lightboxState = { images: [], index: 0 };
 
 // ===== Boot =====
 document.addEventListener('DOMContentLoaded', () => {
-  // Tab switching
+  // Tabs
   const tabCelebrations = document.getElementById('tab-celebrations');
-  const tabAchievements  = document.getElementById('tab-achievements');
+  const tabAchievements = document.getElementById('tab-achievements');
   const viewCelebrations = document.getElementById('view-celebrations');
   const viewAchievements = document.getElementById('view-achievements');
 
@@ -25,7 +22,6 @@ document.addEventListener('DOMContentLoaded', () => {
     activateTab(tabCelebrations, viewCelebrations);
     deactivateTab(tabAchievements, viewAchievements);
   });
-
   tabAchievements.addEventListener('click', () => {
     activateTab(tabAchievements, viewAchievements);
     deactivateTab(tabCelebrations, viewCelebrations);
@@ -37,7 +33,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.documentElement.setAttribute('data-theme', e.target.value);
   });
 
-  // Lightbox handlers
+  // Lightbox
   document.getElementById('lightboxClose').addEventListener('click', closeLightbox);
   document.getElementById('lightboxPrev').addEventListener('click', () => navLightbox(-1));
   document.getElementById('lightboxNext').addEventListener('click', () => navLightbox(1));
@@ -45,7 +41,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (e.target.id === 'lightbox') closeLightbox();
   });
 
-  // Load data & render
+  // Load data
   fetch('celebrations.yaml')
     .then(r => r.text())
     .then(yamlText => {
@@ -53,8 +49,11 @@ document.addEventListener('DOMContentLoaded', () => {
       const celebrations = Array.isArray(data.celebrations) ? data.celebrations : [];
       const achievements = Array.isArray(data.achievements) ? data.achievements : [];
 
+      // Determine base path for local images
+      const assetsBase = ensureTrailingSlash(typeof data.assets_base_path === 'string' ? data.assets_base_path : '/data/');
+
       renderCalendar(celebrations);
-      renderAchievements(achievements);
+      renderAchievements(achievements, assetsBase);
       renderAchievementsChart(achievements);
     })
     .catch(err => console.error('Error loading YAML:', err));
@@ -72,7 +71,7 @@ function deactivateTab(tabBtn, viewEl) {
   viewEl.classList.remove('active');
 }
 
-// ===== Celebrations (existing functionality) =====
+// ===== Celebrations (existing) =====
 function renderCalendar(events) {
   const calendar = document.getElementById('calendar');
   calendar.innerHTML = '';
@@ -80,21 +79,13 @@ function renderCalendar(events) {
   const today = new Date();
   const currentYear = today.getFullYear();
 
-  // Process events: set year to current year (or use provided), bump to next year if already passed
   const processed = events.map(event => {
-    let [day, month, year] = (event.date || '').split('.');
+    let [day, month] = String(event.date || '').split('.');
     day = parseInt(day);
-    month = parseInt(month) - 1; // 0-based
-    year = parseInt(year) || currentYear;
-
+    month = parseInt(month) - 1;
     let eventDate = new Date(currentYear, month, day);
-    if (isNaN(eventDate.getTime())) {
-      // fallback if parsing failed
-      eventDate = new Date(currentYear, 0, 1);
-    } else if (eventDate < today) {
-      eventDate.setFullYear(currentYear + 1);
-    }
-
+    if (isNaN(eventDate.getTime())) eventDate = new Date(currentYear, 0, 1);
+    else if (eventDate < today) eventDate.setFullYear(currentYear + 1);
     return { ...event, eventDate };
   });
 
@@ -107,24 +98,20 @@ function renderCalendar(events) {
     const contentDiv = document.createElement('div');
     contentDiv.classList.add('content');
 
-    // Icon
     const icon = document.createElement('i');
     icon.classList.add('fa-solid', eventIcons[event.type] || 'fa-star', 'icon');
     contentDiv.appendChild(icon);
 
-    // Title
     const title = document.createElement('div');
     title.classList.add('title');
     title.textContent = capitalizeFirstLetter(event.type || 'event');
     contentDiv.appendChild(title);
 
-    // Name
     const name = document.createElement('div');
     name.classList.add('name');
     name.textContent = event.name || '';
     contentDiv.appendChild(name);
 
-    // Date
     const date = document.createElement('div');
     date.classList.add('date');
     date.textContent = formatDate(event.eventDate);
@@ -135,12 +122,11 @@ function renderCalendar(events) {
   });
 }
 
-// ===== Achievements (top-down list + image gallery) =====
-function renderAchievements(items) {
+// ===== Achievements (top-down + gallery) =====
+function renderAchievements(items, assetsBase) {
   const container = document.getElementById('achievementsList');
   container.innerHTML = '';
 
-  // Sort newest first (top-down page)
   const parsed = items
     .map(a => ({ ...a, parsedDate: parseDDMMYYYY(a.date) }))
     .sort((a, b) => (b.parsedDate?.getTime() || 0) - (a.parsedDate?.getTime() || 0));
@@ -172,12 +158,15 @@ function renderAchievements(items) {
       card.appendChild(desc);
     }
 
-    // Gallery (thumbnails -> lightbox)
+    // Gallery
     if (Array.isArray(a.images) && a.images.length) {
       const gallery = document.createElement('div');
       gallery.classList.add('gallery');
 
-      a.images.forEach((src, i) => {
+      // Pre-resolve all images for lightbox
+      const resolvedImages = a.images.map(src => resolveImageSrc(src, assetsBase));
+
+      resolvedImages.forEach((src, i) => {
         const btn = document.createElement('button');
         btn.classList.add('thumb');
         btn.setAttribute('aria-label', `Open image ${i + 1} for ${a.title || 'achievement'}`);
@@ -189,7 +178,7 @@ function renderAchievements(items) {
         img.alt = `${a.title || 'Achievement'} image ${i + 1}`;
 
         btn.appendChild(img);
-        btn.addEventListener('click', () => openLightbox(a.images, i));
+        btn.addEventListener('click', () => openLightbox(resolvedImages, i));
         gallery.appendChild(btn);
       });
 
@@ -200,86 +189,51 @@ function renderAchievements(items) {
   });
 }
 
-// ===== Chart (XY if provided, otherwise fallback) =====
+// ===== Chart (XY or fallback) =====
 function renderAchievementsChart(items) {
   const canvas = document.getElementById('achievementsChart');
   const note   = document.getElementById('chartNote');
 
-  // Collect XY points
   const xyPoints = items
     .filter(a => a.xy && isFinite(+a.xy.x) && isFinite(+a.xy.y))
-    .map(a => ({
-      x: Number(a.xy.x),
-      y: Number(a.xy.y),
-      title: a.title || '',
-    }));
+    .map(a => ({ x: Number(a.xy.x), y: Number(a.xy.y), title: a.title || '' }));
 
-  let chart;
   if (xyPoints.length) {
-    // Scatter chart
-    chart = new Chart(canvas, {
+    new Chart(canvas, {
       type: 'scatter',
-      data: {
-        datasets: [{
-          label: 'Achievements',
-          data: xyPoints,
-          pointRadius: 5,
-        }]
-      },
+      data: { datasets: [{ label: 'Achievements', data: xyPoints, pointRadius: 5 }] },
       options: {
-        responsive: true,
-        maintainAspectRatio: false,
+        responsive: true, maintainAspectRatio: false,
         plugins: {
-          tooltip: {
-            callbacks: {
-              label: (ctx) => {
-                const d = ctx.raw;
-                return `${d.title ? d.title + ' — ' : ''}x: ${d.x}, y: ${d.y}`;
-              }
-            }
-          },
+          tooltip: { callbacks: { label: (ctx) => {
+            const d = ctx.raw; return `${d.title ? d.title + ' — ' : ''}x: ${d.x}, y: ${d.y}`;
+          }}},
           legend: { display: false }
         },
-        scales: {
-          x: { title: { display: true, text: 'X' } },
-          y: { title: { display: true, text: 'Y' } },
-        }
+        scales: { x: { title: { display: true, text: 'X' } }, y: { title: { display: true, text: 'Y' } } }
       }
     });
     note.textContent = 'Showing XY scatter from achievement data.';
   } else {
-    // Fallback: bar chart by year (count achievements)
     const byYear = {};
     items.forEach(a => {
-      const d = parseDDMMYYYY(a.date);
-      if (!d) return;
-      const y = d.getFullYear();
-      byYear[y] = (byYear[y] || 0) + 1;
+      const d = parseDDMMYYYY(a.date); if (!d) return;
+      const y = d.getFullYear(); byYear[y] = (byYear[y] || 0) + 1;
     });
     const labels = Object.keys(byYear).sort((a,b) => +a - +b);
     const counts = labels.map(y => byYear[y]);
 
-    chart = new Chart(canvas, {
+    new Chart(canvas, {
       type: 'bar',
-      data: {
-        labels,
-        datasets: [{ label: 'Achievements per Year', data: counts }]
-      },
+      data: { labels, datasets: [{ label: 'Achievements per Year', data: counts }] },
       options: {
-        responsive: true,
-        maintainAspectRatio: false,
+        responsive: true, maintainAspectRatio: false,
         plugins: { legend: { display: false } },
-        scales: {
-          x: { title: { display: true, text: 'Year' } },
-          y: { title: { display: true, text: 'Count' }, beginAtZero: true, precision: 0 }
-        }
+        scales: { x: { title: { display: true, text: 'Year' } }, y: { title: { display: true, text: 'Count' }, beginAtZero: true } }
       }
     });
     note.textContent = 'No XY data found; showing achievements per year.';
   }
-
-  // Keep a reference if you later want to update/resize; not strictly needed now.
-  return chart;
 }
 
 // ===== Lightbox =====
@@ -323,4 +277,15 @@ function parseDDMMYYYY(s) {
   const year = parts[2] ? parseInt(parts[2], 10) : new Date().getFullYear();
   const d = new Date(year, month, day);
   return isNaN(d.getTime()) ? null : d;
+}
+function ensureTrailingSlash(p) {
+  if (!p) return '/';
+  return p.endsWith('/') ? p : p + '/';
+}
+function resolveImageSrc(src, base) {
+  if (!src) return '';
+  // Absolute URL or absolute path
+  if (/^([a-z]+:)?\/\//i.test(src) || src.startsWith('/')) return src;
+  // Relative -> prefix base (/data/ by default)
+  return ensureTrailingSlash(base) + src.replace(/^\.?\//, '');
 }

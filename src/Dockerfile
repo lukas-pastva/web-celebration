@@ -1,23 +1,17 @@
-# Use an official Nginx image to serve the static files
 FROM nginx:alpine
 
-# Remove the default Nginx static assets
-RUN rm -rf /usr/share/nginx/html/*
+# Clean default assets and entrypoint scripts
+RUN rm -rf /usr/share/nginx/html/* && rm -rf /docker-entrypoint.d/*
 
-# Remove any scripts in /docker-entrypoint.d/ to prevent modification attempts
-RUN rm -rf /docker-entrypoint.d/*
-
-# Copy the current directory contents into the Nginx html directory
+# App files
 COPY html/ /usr/share/nginx/html
-
-# Copy custom Nginx configuration
 COPY nginx.conf /etc/nginx/nginx.conf
 
-# Ensure /tmp is writable and create necessary temp directories
+# Prepare temp dirs
 RUN mkdir -p /tmp/client_body_temp /tmp/proxy_temp /tmp/fastcgi_temp /tmp/uwsgi_temp /tmp/scgi_temp
 
-# Expose port 80
-EXPOSE 80
+# Declare a mount point for images
+VOLUME ["/data"]
 
-# Start Nginx when the container launches
+EXPOSE 80
 CMD ["nginx", "-g", "daemon off;"]

@@ -7,10 +7,10 @@ const eventIcons = {
   wedding: 'fa-ring',
 };
 
-// ===== State for lightbox =====
+// ===== State =====
 let lightboxState = { images: [], index: 0 };
+let achievementsChart = null; // prevent duplicate charts
 
-// ===== Boot =====
 document.addEventListener('DOMContentLoaded', () => {
   // Tabs & views
   const tabsContainer     = document.querySelector('.tabs');
@@ -19,39 +19,40 @@ document.addEventListener('DOMContentLoaded', () => {
   const viewCelebrations  = document.getElementById('view-celebrations');
   const viewAchievements  = document.getElementById('view-achievements');
 
-  // Tab switching
   tabCelebrations.addEventListener('click', () => {
     activateTab(tabCelebrations, viewCelebrations);
     deactivateTab(tabAchievements, viewAchievements);
+    // Optional: if chart was initialized while hidden, resize on show
+    if (achievementsChart) achievementsChart.resize();
   });
   tabAchievements.addEventListener('click', () => {
     activateTab(tabAchievements, viewAchievements);
     deactivateTab(tabCelebrations, viewCelebrations);
+    if (achievementsChart) achievementsChart.resize();
   });
 
-  // Theme switching
+  // Theme
   const themeSelect = document.getElementById('themeSelect');
   themeSelect.addEventListener('change', (e) => {
     document.documentElement.setAttribute('data-theme', e.target.value);
+    if (achievementsChart) achievementsChart.resize();
   });
 
-  // Lightbox handlers
+  // Lightbox
   document.getElementById('lightboxClose').addEventListener('click', closeLightbox);
   document.getElementById('lightboxPrev').addEventListener('click', () => navLightbox(-1));
   document.getElementById('lightboxNext').addEventListener('click', () => navLightbox(1));
-  document.getElementById('lightbox').addEventListener('click', (e) => {
-    if (e.target.id === 'lightbox') closeLightbox();
-  });
+  document.getElementById('lightbox').addEventListener('click', (e) => { if (e.target.id === 'lightbox') closeLightbox(); });
 
-  // Load data & render
-  fetch('celebrations.yaml')
+  // Load data (cache-busted) & render
+  const bust = Date.now();
+  fetch(`celebrations.yaml?t=${bust}`, { cache: 'no-store' })
     .then(r => r.text())
     .then(yamlText => {
       const data = jsyaml.load(yamlText) || {};
       const celebrations = Array.isArray(data.celebrations) ? data.celebrations : [];
       const achievements = Array.isArray(data.achievements) ? data.achievements : [];
 
-      // Base path for local images (default /data/); used by auto-gallery
       const assetsBase = ensureTrailingSlash(
         typeof data.assets_base_path === 'string' ? data.assets_base_path : '/data/'
       );
@@ -59,14 +60,12 @@ document.addEventListener('DOMContentLoaded', () => {
       const haveCelebrations = celebrations.length > 0;
       const haveAchievements = achievements.length > 0;
 
-      // Render only what exists
       if (haveCelebrations) renderCalendar(celebrations);
       if (haveAchievements) {
         renderAchievements(achievements, assetsBase);
         renderAchievementsChart(achievements);
       }
 
-      // Adapt UI (hide tabs/sections that have no data)
       adaptUI({
         haveCelebrations, haveAchievements,
         tabsContainer, tabCelebrations, tabAchievements,
@@ -86,7 +85,6 @@ function adaptUI(ctx) {
     themeSelect
   } = ctx;
 
-  // Hide missing tabs + views
   if (!haveCelebrations) {
     tabCelebrations.style.display = 'none';
     viewCelebrations.classList.remove('active');
@@ -98,33 +96,28 @@ function adaptUI(ctx) {
     viewAchievements.style.display = 'none';
   }
 
-  // If both missing → show empty state, hide tabs
   if (!haveCelebrations && !haveAchievements) {
     if (tabsContainer) tabsContainer.style.display = 'none';
     const main = document.querySelector('.container');
     const empty = document.createElement('div');
     empty.style.margin = '24px 0';
     empty.style.color = 'var(--muted)';
-    empty.innerHTML = `<p>No celebrations or achievements to show.</p>`;
+    empty.textContent = 'No celebrations or achievements to show.';
     main.appendChild(empty);
     return;
   }
 
-  // If only one exists → activate it and hide the tabs bar
   if (haveCelebrations && !haveAchievements) {
     activateTab(tabCelebrations, viewCelebrations);
     if (tabsContainer) tabsContainer.style.display = 'none';
-    // Optional: set theme to celebrations
     document.documentElement.setAttribute('data-theme', 'celebrations');
     if (themeSelect) themeSelect.value = 'celebrations';
   } else if (!haveCelebrations && haveAchievements) {
     activateTab(tabAchievements, viewAchievements);
     if (tabsContainer) tabsContainer.style.display = 'none';
-    // Optional: set theme to achievements
     document.documentElement.setAttribute('data-theme', 'achievements');
     if (themeSelect) themeSelect.value = 'achievements';
   } else {
-    // Both exist: keep tabs visible; ensure one is active
     if (!tabCelebrations.classList.contains('active') &&
         !tabAchievements.classList.contains('active')) {
       activateTab(tabCelebrations, viewCelebrations);
@@ -147,7 +140,7 @@ function deactivateTab(tabBtn, viewEl) {
   viewEl.style.display = 'none';
 }
 
-// ===== Celebrations (existing) =====
+// ===== Celebrations =====
 function renderCalendar(events) {
   const calendar = document.getElementById('calendar');
   calendar.innerHTML = '';
@@ -157,11 +150,15 @@ function renderCalendar(events) {
 
   const processed = events.map(event => {
     let [day, month, year] = String(event.date || '').split('.');
-    day = parseInt(day, 10);
-    month = parseInt(month, 10) - 1;
-    year = parseInt(year, 10) || currentYear;
+    const dd = parseInt(day, 10);
+    const mm = parseInt(month, 10) - 1;
+    let yy = parseInt(year, 10);
 
-    let eventDate = new Date(currentYear, month, day);
+    // If year missing, use current; if 2-digit year, pivot (00–69 => 2000+, 70–99 => 1900+)
+    if (!Number.isFinite(yy)) yy = currentYear;
+    else if (year && year.length === 2) yy = yy <= 69 ? 2000 + yy : 1900 + yy;
+
+    let eventDate = new Date(currentYear, mm, dd);
     if (isNaN(eventDate.getTime())) eventDate = new Date(currentYear, 0, 1);
     else if (eventDate < today) eventDate.setFullYear(currentYear + 1);
 
@@ -241,7 +238,6 @@ function renderAchievements(items, assetsBase) {
     gallery.classList.add('gallery');
     card.appendChild(gallery);
 
-    // If YAML contains images, use them; else auto-discover /data/<slug>/*
     if (Array.isArray(a.images) && a.images.length) {
       const resolved = a.images.map(src => resolveImageSrc(src, assetsBase));
       buildGallery(gallery, resolved, a.title);
@@ -303,7 +299,7 @@ function buildGallery(container, imageUrls, title = 'Achievement') {
 
 // ===== Directory listing fetch & parse (requires Nginx autoindex on /data) =====
 async function listImagesInDir(dirUrl) {
-  const res = await fetch(dirUrl, { headers: { 'Accept': 'text/html' } });
+  const res = await fetch(dirUrl, { headers: { 'Accept': 'text/html' }, cache: 'no-store' });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const html = await res.text();
   const doc = new DOMParser().parseFromString(html, 'text/html');
@@ -322,24 +318,45 @@ function renderAchievementsChart(items) {
   const canvas = document.getElementById('achievementsChart');
   const note   = document.getElementById('chartNote');
 
+  // Hard-lock canvas height to avoid reflow loops
+  canvas.style.height = '280px';
+
+  // Destroy existing chart if present
+  if (achievementsChart) {
+    achievementsChart.destroy();
+    achievementsChart = null;
+  }
+
   const xyPoints = items
     .filter(a => a.xy && isFinite(+a.xy.x) && isFinite(+a.xy.y))
     .map(a => ({ x: Number(a.xy.x), y: Number(a.xy.y), title: a.title || '' }));
 
+  const opts = {
+    responsive: true,
+    maintainAspectRatio: false,
+    animation: false,             // reduce CPU
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        callbacks: {
+          label: (ctx) => {
+            const d = ctx.raw;
+            return `${d.title ? d.title + ' — ' : ''}x: ${d.x}, y: ${d.y}`;
+          }
+        }
+      }
+    },
+    scales: {
+      x: { title: { display: true, text: 'X' } },
+      y: { title: { display: true, text: 'Y' } }
+    }
+  };
+
   if (xyPoints.length) {
-    new Chart(canvas, {
+    achievementsChart = new Chart(canvas, {
       type: 'scatter',
       data: { datasets: [{ label: 'Achievements', data: xyPoints, pointRadius: 5 }] },
-      options: {
-        responsive: true, maintainAspectRatio: false,
-        plugins: {
-          tooltip: { callbacks: { label: (ctx) => {
-            const d = ctx.raw; return `${d.title ? d.title + ' — ' : ''}x: ${d.x}, y: ${d.y}`;
-          }}},
-          legend: { display: false }
-        },
-        scales: { x: { title: { display: true, text: 'X' } }, y: { title: { display: true, text: 'Y' } } }
-      }
+      options: opts
     });
     note.textContent = 'Showing XY scatter from achievement data.';
   } else {
@@ -351,14 +368,10 @@ function renderAchievementsChart(items) {
     const labels = Object.keys(byYear).sort((a,b) => +a - +b);
     const counts = labels.map(y => byYear[y]);
 
-    new Chart(canvas, {
+    achievementsChart = new Chart(canvas, {
       type: 'bar',
       data: { labels, datasets: [{ label: 'Achievements per Year', data: counts }] },
-      options: {
-        responsive: true, maintainAspectRatio: false,
-        plugins: { legend: { display: false } },
-        scales: { x: { title: { display: true, text: 'Year' } }, y: { title: { display: true, text: 'Count' }, beginAtZero: true } }
-      }
+      options: opts
     });
     note.textContent = 'No XY data found; showing achievements per year.';
   }
@@ -402,14 +415,16 @@ function parseDDMMYYYY(s) {
   if (parts.length < 2) return null;
   const day = parseInt(parts[0], 10);
   const month = parseInt(parts[1], 10) - 1;
-  const year = parts[2] ? parseInt(parts[2], 10) : new Date().getFullYear();
-  const d = new Date(year, month, day);
+
+  let year = parts[2] ? parts[2].trim() : '';
+  let yy = parseInt(year, 10);
+  if (!Number.isFinite(yy)) yy = new Date().getFullYear();
+  else if (year.length === 2) yy = yy <= 69 ? 2000 + yy : 1900 + yy; // 2-digit pivot
+
+  const d = new Date(yy, month, day);
   return isNaN(d.getTime()) ? null : d;
 }
-function ensureTrailingSlash(p) {
-  if (!p) return '/';
-  return p.endsWith('/') ? p : p + '/';
-}
+function ensureTrailingSlash(p) { return p && p.endsWith('/') ? p : (p || '/') + (p?.endsWith('/') ? '' : '/'); }
 function resolveImageSrc(src, base) {
   if (!src) return '';
   if (/^([a-z]+:)?\/\//i.test(src) || src.startsWith('/')) return src;

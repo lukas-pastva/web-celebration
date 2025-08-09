@@ -12,12 +12,14 @@ let lightboxState = { images: [], index: 0 };
 
 // ===== Boot =====
 document.addEventListener('DOMContentLoaded', () => {
-  // Tabs
-  const tabCelebrations = document.getElementById('tab-celebrations');
-  const tabAchievements = document.getElementById('tab-achievements');
-  const viewCelebrations = document.getElementById('view-celebrations');
-  const viewAchievements = document.getElementById('view-achievements');
+  // Tabs & views
+  const tabsContainer     = document.querySelector('.tabs');
+  const tabCelebrations   = document.getElementById('tab-celebrations');
+  const tabAchievements   = document.getElementById('tab-achievements');
+  const viewCelebrations  = document.getElementById('view-celebrations');
+  const viewAchievements  = document.getElementById('view-achievements');
 
+  // Tab switching
   tabCelebrations.addEventListener('click', () => {
     activateTab(tabCelebrations, viewCelebrations);
     deactivateTab(tabAchievements, viewAchievements);
@@ -27,13 +29,13 @@ document.addEventListener('DOMContentLoaded', () => {
     deactivateTab(tabCelebrations, viewCelebrations);
   });
 
-  // Theme
+  // Theme switching
   const themeSelect = document.getElementById('themeSelect');
   themeSelect.addEventListener('change', (e) => {
     document.documentElement.setAttribute('data-theme', e.target.value);
   });
 
-  // Lightbox
+  // Lightbox handlers
   document.getElementById('lightboxClose').addEventListener('click', closeLightbox);
   document.getElementById('lightboxPrev').addEventListener('click', () => navLightbox(-1));
   document.getElementById('lightboxNext').addEventListener('click', () => navLightbox(1));
@@ -41,7 +43,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (e.target.id === 'lightbox') closeLightbox();
   });
 
-  // Load data
+  // Load data & render
   fetch('celebrations.yaml')
     .then(r => r.text())
     .then(yamlText => {
@@ -49,28 +51,100 @@ document.addEventListener('DOMContentLoaded', () => {
       const celebrations = Array.isArray(data.celebrations) ? data.celebrations : [];
       const achievements = Array.isArray(data.achievements) ? data.achievements : [];
 
-      // Base path for local images (default to /data/)
+      // Base path for local images (default /data/); used by auto-gallery
       const assetsBase = ensureTrailingSlash(
         typeof data.assets_base_path === 'string' ? data.assets_base_path : '/data/'
       );
 
-      renderCalendar(celebrations);
-      renderAchievements(achievements, assetsBase);
-      renderAchievementsChart(achievements);
+      const haveCelebrations = celebrations.length > 0;
+      const haveAchievements = achievements.length > 0;
+
+      // Render only what exists
+      if (haveCelebrations) renderCalendar(celebrations);
+      if (haveAchievements) {
+        renderAchievements(achievements, assetsBase);
+        renderAchievementsChart(achievements);
+      }
+
+      // Adapt UI (hide tabs/sections that have no data)
+      adaptUI({
+        haveCelebrations, haveAchievements,
+        tabsContainer, tabCelebrations, tabAchievements,
+        viewCelebrations, viewAchievements,
+        themeSelect
+      });
     })
     .catch(err => console.error('Error loading YAML:', err));
 });
+
+// ===== UI adaptation =====
+function adaptUI(ctx) {
+  const {
+    haveCelebrations, haveAchievements,
+    tabsContainer, tabCelebrations, tabAchievements,
+    viewCelebrations, viewAchievements,
+    themeSelect
+  } = ctx;
+
+  // Hide missing tabs + views
+  if (!haveCelebrations) {
+    tabCelebrations.style.display = 'none';
+    viewCelebrations.classList.remove('active');
+    viewCelebrations.style.display = 'none';
+  }
+  if (!haveAchievements) {
+    tabAchievements.style.display = 'none';
+    viewAchievements.classList.remove('active');
+    viewAchievements.style.display = 'none';
+  }
+
+  // If both missing → show empty state, hide tabs
+  if (!haveCelebrations && !haveAchievements) {
+    if (tabsContainer) tabsContainer.style.display = 'none';
+    const main = document.querySelector('.container');
+    const empty = document.createElement('div');
+    empty.style.margin = '24px 0';
+    empty.style.color = 'var(--muted)';
+    empty.innerHTML = `<p>No celebrations or achievements to show.</p>`;
+    main.appendChild(empty);
+    return;
+  }
+
+  // If only one exists → activate it and hide the tabs bar
+  if (haveCelebrations && !haveAchievements) {
+    activateTab(tabCelebrations, viewCelebrations);
+    if (tabsContainer) tabsContainer.style.display = 'none';
+    // Optional: set theme to celebrations
+    document.documentElement.setAttribute('data-theme', 'celebrations');
+    if (themeSelect) themeSelect.value = 'celebrations';
+  } else if (!haveCelebrations && haveAchievements) {
+    activateTab(tabAchievements, viewAchievements);
+    if (tabsContainer) tabsContainer.style.display = 'none';
+    // Optional: set theme to achievements
+    document.documentElement.setAttribute('data-theme', 'achievements');
+    if (themeSelect) themeSelect.value = 'achievements';
+  } else {
+    // Both exist: keep tabs visible; ensure one is active
+    if (!tabCelebrations.classList.contains('active') &&
+        !tabAchievements.classList.contains('active')) {
+      activateTab(tabCelebrations, viewCelebrations);
+      deactivateTab(tabAchievements, viewAchievements);
+    }
+  }
+}
 
 // ===== Tabs helpers =====
 function activateTab(tabBtn, viewEl) {
   tabBtn.classList.add('active');
   tabBtn.setAttribute('aria-selected', 'true');
   viewEl.classList.add('active');
+  viewEl.style.display = 'block';
 }
 function deactivateTab(tabBtn, viewEl) {
   tabBtn.classList.remove('active');
   tabBtn.setAttribute('aria-selected', 'false');
   viewEl.classList.remove('active');
+  viewEl.style.display = 'none';
 }
 
 // ===== Celebrations (existing) =====
@@ -83,9 +157,9 @@ function renderCalendar(events) {
 
   const processed = events.map(event => {
     let [day, month, year] = String(event.date || '').split('.');
-    day = parseInt(day);
-    month = parseInt(month) - 1;
-    year = parseInt(year) || currentYear;
+    day = parseInt(day, 10);
+    month = parseInt(month, 10) - 1;
+    year = parseInt(year, 10) || currentYear;
 
     let eventDate = new Date(currentYear, month, day);
     if (isNaN(eventDate.getTime())) eventDate = new Date(currentYear, 0, 1);
@@ -127,7 +201,7 @@ function renderCalendar(events) {
   });
 }
 
-// ===== Achievements (auto-gallery by title) =====
+// ===== Achievements (auto-gallery by title or explicit images) =====
 function renderAchievements(items, assetsBase) {
   const container = document.getElementById('achievementsList');
   container.innerHTML = '';
@@ -167,16 +241,14 @@ function renderAchievements(items, assetsBase) {
     gallery.classList.add('gallery');
     card.appendChild(gallery);
 
-    // Use explicit images if provided, otherwise auto-discover
+    // If YAML contains images, use them; else auto-discover /data/<slug>/*
     if (Array.isArray(a.images) && a.images.length) {
       const resolved = a.images.map(src => resolveImageSrc(src, assetsBase));
       buildGallery(gallery, resolved, a.title);
     } else {
-      // Auto-discover: /data/<slugified-title>/
       const folder = slugify(a.title || `achievement-${idx + 1}`);
       const dirUrl = ensureTrailingSlash(assetsBase) + folder + '/';
 
-      // Placeholder while loading
       const placeholder = document.createElement('div');
       placeholder.textContent = 'Loading images…';
       placeholder.style.color = 'var(--muted)';
@@ -229,9 +301,8 @@ function buildGallery(container, imageUrls, title = 'Achievement') {
   });
 }
 
-// ===== Directory listing fetch & parse =====
+// ===== Directory listing fetch & parse (requires Nginx autoindex on /data) =====
 async function listImagesInDir(dirUrl) {
-  // Expecting Nginx autoindex HTML
   const res = await fetch(dirUrl, { headers: { 'Accept': 'text/html' } });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const html = await res.text();
@@ -239,16 +310,12 @@ async function listImagesInDir(dirUrl) {
   const anchors = Array.from(doc.querySelectorAll('a'));
   const files = anchors
     .map(a => a.getAttribute('href') || '')
-    .filter(h => h && !h.endsWith('/')) // skip subfolders and parent links
+    .filter(h => h && !h.endsWith('/'))
     .filter(isImageFile);
 
-  // Convert to absolute URLs relative to dir
   return files.map(h => new URL(h, dirUrl).toString());
 }
-
-function isImageFile(name) {
-  return /\.(png|jpe?g|webp|gif|bmp|svg)$/i.test(name);
-}
+function isImageFile(name) { return /\.(png|jpe?g|webp|gif|bmp|svg)$/i.test(name); }
 
 // ===== Chart (XY or fallback) =====
 function renderAchievementsChart(items) {
@@ -345,14 +412,12 @@ function ensureTrailingSlash(p) {
 }
 function resolveImageSrc(src, base) {
   if (!src) return '';
-  if (/^([a-z]+:)?\/\//i.test(src) || src.startsWith('/')) return src; // URL or absolute path
+  if (/^([a-z]+:)?\/\//i.test(src) || src.startsWith('/')) return src;
   return ensureTrailingSlash(base) + src.replace(/^\.?\//, '');
 }
 function slugify(str) {
   return String(str || '')
-    .normalize('NFKD')                 // split diacritics
-    .replace(/[\u0300-\u036f]/g, '')   // remove diacritic marks
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')       // non-alnum -> hyphen
-    .replace(/^-+|-+$/g, '');          // trim hyphens
+    .normalize('NFKD').replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase().replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
 }

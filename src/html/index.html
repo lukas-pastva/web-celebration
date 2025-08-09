@@ -1,29 +1,96 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="celebrations">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Web-Celebration</title>
-    <link rel="stylesheet" href="styles.css">
-    <!-- Font Awesome for Icons -->
-    <link
-      rel="stylesheet"
-      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
-      crossorigin="anonymous"
-      referrerpolicy="no-referrer"
-    />
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Web-Celebration</title>
+  <link rel="stylesheet" href="styles.css" />
+
+  <!-- Font Awesome for Icons -->
+  <link
+    rel="stylesheet"
+    href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
+    crossorigin="anonymous"
+    referrerpolicy="no-referrer"
+  />
+
+  <!-- js-yaml -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/js-yaml/4.1.0/js-yaml.min.js"
+          crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+
+  <!-- Chart.js for XY / fallback charts -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"
+          crossorigin="anonymous"></script>
 </head>
 <body>
-    <div class="container">
-        <h1>Celebrations Calendar</h1>
-        <div id="calendar">
-            <!-- Calendar will be generated here -->
-        </div>
+  <header class="topbar">
+    <div class="brand">
+      <i class="fa-solid fa-calendar-star"></i>
+      <span>Web-Celebration</span>
     </div>
 
-    <!-- js-yaml Library -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/js-yaml/4.1.0/js-yaml.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-    <!-- Main Script -->
-    <script src="script.js"></script>
+    <div class="controls">
+      <div class="tabs" role="tablist" aria-label="Views">
+        <button id="tab-celebrations" class="tab active" role="tab" aria-selected="true" aria-controls="view-celebrations">
+          <i class="fa-solid fa-cake-candles"></i> Celebrations
+        </button>
+        <button id="tab-achievements" class="tab" role="tab" aria-selected="false" aria-controls="view-achievements">
+          <i class="fa-solid fa-trophy"></i> Achievements
+        </button>
+      </div>
+
+      <label class="theme-switch">
+        <span><i class="fa-solid fa-palette"></i> Theme</span>
+        <select id="themeSelect" aria-label="Theme">
+          <option value="celebrations">Celebrations</option>
+          <option value="achievements">Achievements</option>
+        </select>
+      </label>
+    </div>
+  </header>
+
+  <main class="container">
+    <!-- Celebrations (existing vertical timeline) -->
+    <section id="view-celebrations" class="view active" aria-labelledby="tab-celebrations">
+      <h1>Celebrations Calendar</h1>
+      <div id="calendar"></div>
+    </section>
+
+    <!-- New: Achievements (top-down page) -->
+    <section id="view-achievements" class="view" aria-labelledby="tab-achievements">
+      <div class="achievements-header">
+        <h1>Life Achievements</h1>
+        <p class="subtitle">
+          A top-down list of milestones with image galleries and an XY chart.
+        </p>
+      </div>
+
+      <!-- Chart -->
+      <div class="chart-card">
+        <h2><i class="fa-solid fa-chart-scatter"></i> Achievements — XY Chart</h2>
+        <canvas id="achievementsChart" height="220"></canvas>
+        <div class="chart-note" id="chartNote"></div>
+      </div>
+
+      <!-- Achievements list -->
+      <div id="achievementsList" class="achievements-list"></div>
+    </section>
+  </main>
+
+  <!-- Lightbox modal for image galleries -->
+  <div id="lightbox" class="lightbox" aria-modal="true" role="dialog" hidden>
+    <button class="lightbox-close" id="lightboxClose" aria-label="Close">
+      <i class="fa-solid fa-xmark"></i>
+    </button>
+    <button class="lightbox-nav prev" id="lightboxPrev" aria-label="Previous image">
+      <i class="fa-solid fa-chevron-left"></i>
+    </button>
+    <img id="lightboxImg" alt="Achievement image" />
+    <button class="lightbox-nav next" id="lightboxNext" aria-label="Next image">
+      <i class="fa-solid fa-chevron-right"></i>
+    </button>
+  </div>
+
+  <script src="script.js"></script>
 </body>
 </html>

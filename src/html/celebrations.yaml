@@ -1,3 +1,4 @@
+# Celebrations (existing feature stays the same)
 celebrations:
   - type: valentine
     name: Valentine
@@ -5,3 +6,46 @@ celebrations:
   - type: christmas
     name: Christmas
     date: 25.12.
+
+# New: Achievements
+# - description: long text
+# - images: per-achievement gallery (array of URLs)
+# - xy: optional numeric coordinates for the scatter chart
+achievements:
+  - title: First Marathon
+    date: 15.09.2022
+    description: >
+      Ran my first full marathon in under 4 hours. Months of training,
+      pacing discipline, and nutrition planning paid off.
+    images:
+      - https://picsum.photos/seed/marathon1/800/500
+      - https://picsum.photos/seed/marathon2/800/500
+      - https://picsum.photos/seed/marathon3/800/500
+    xy:
+      x: 2022
+      y: 42.195
+
+  - title: Promoted to Staff Engineer
+    date: 02.03.2023
+    description: >
+      Led the migration to Kubernetes, introduced GitOps and automated
+      deployments. Mentored the team through the transition.
+    images:
+      - https://picsum.photos/seed/staff1/800/500
+      - https://picsum.photos/seed/staff2/800/500
+    xy:
+      x: 2023
+      y: 2
+
+  - title: Finished Triathlon
+    date: 27.07.2024
+    description: >
+      Completed my first triathlon (750m swim, 20km bike, 5km run).
+      Learned a ton about endurance and transition efficiency.
+    images:
+      - https://picsum.photos/seed/tri1/800/500
+      - https://picsum.photos/seed/tri2/800/500
+      - https://picsum.photos/seed/tri3/800/500
+    xy:
+      x: 2024
+      y: 3

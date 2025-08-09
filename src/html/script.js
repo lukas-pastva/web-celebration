@@ -12,16 +12,20 @@ let lightboxState = { images: [], index: 0 };
 let achievementsChart = null; // prevent duplicate charts
 const THEME_KEY = 'wc_theme';
 
+// ===== Safe helpers =====
+const $ = (sel) => document.querySelector(sel);
+function on(el, ev, fn) { if (el) el.addEventListener(ev, fn); } // null-safe
+
 // ===== Theme helpers =====
 function preferredTheme() {
   const saved = localStorage.getItem(THEME_KEY);
   if (saved === 'light' || saved === 'dark') return saved;
-  return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
+  return (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches)
     ? 'dark' : 'light';
 }
 function setTheme(theme) {
   document.documentElement.setAttribute('data-theme', theme);
-  localStorage.setItem(THEME_KEY, theme);
+  try { localStorage.setItem(THEME_KEY, theme); } catch {}
   updateThemeToggleIcon(theme);
   if (achievementsChart) achievementsChart.resize();
 }
@@ -29,8 +33,8 @@ function currentTheme() {
   return document.documentElement.getAttribute('data-theme') || 'light';
 }
 function updateThemeToggleIcon(theme) {
-  const icon = document.querySelector('#themeToggle i');
-  const btn  = document.getElementById('themeToggle');
+  const icon = $('#themeToggle i');
+  const btn  = $('#themeToggle');
   if (!icon || !btn) return;
   icon.classList.remove('fa-sun', 'fa-moon');
   if (theme === 'dark') {
@@ -46,35 +50,33 @@ function updateThemeToggleIcon(theme) {
 
 // ===== Boot =====
 document.addEventListener('DOMContentLoaded', () => {
-  // Init theme
+  // Theme (guarded)
   setTheme(preferredTheme());
-  document.getElementById('themeToggle').addEventListener('click', () => {
-    setTheme(currentTheme() === 'light' ? 'dark' : 'light');
-  });
+  on($('#themeToggle'), 'click', () => setTheme(currentTheme() === 'light' ? 'dark' : 'light'));
 
-  // Tabs & views
-  const tabsContainer     = document.querySelector('.tabs');
-  const tabCelebrations   = document.getElementById('tab-celebrations');
-  const tabAchievements   = document.getElementById('tab-achievements');
-  const viewCelebrations  = document.getElementById('view-celebrations');
-  const viewAchievements  = document.getElementById('view-achievements');
+  // Tabs & views (guarded)
+  const tabsContainer     = $('.tabs');
+  const tabCelebrations   = $('#tab-celebrations');
+  const tabAchievements   = $('#tab-achievements');
+  const viewCelebrations  = $('#view-celebrations');
+  const viewAchievements  = $('#view-achievements');
 
-  tabCelebrations.addEventListener('click', () => {
+  on(tabCelebrations, 'click', () => {
     activateTab(tabCelebrations, viewCelebrations);
     deactivateTab(tabAchievements, viewAchievements);
     if (achievementsChart) achievementsChart.resize();
   });
-  tabAchievements.addEventListener('click', () => {
+  on(tabAchievements, 'click', () => {
     activateTab(tabAchievements, viewAchievements);
     deactivateTab(tabCelebrations, viewCelebrations);
     if (achievementsChart) achievementsChart.resize();
   });
 
-  // Lightbox
-  document.getElementById('lightboxClose').addEventListener('click', closeLightbox);
-  document.getElementById('lightboxPrev').addEventListener('click', () => navLightbox(-1));
-  document.getElementById('lightboxNext').addEventListener('click', () => navLightbox(1));
-  document.getElementById('lightbox').addEventListener('click', (e) => { if (e.target.id === 'lightbox') closeLightbox(); });
+  // Lightbox (guarded)
+  on($('#lightboxClose'), 'click', closeLightbox);
+  on($('#lightboxPrev'),  'click', () => navLightbox(-1));
+  on($('#lightboxNext'),  'click', () => navLightbox(1));
+  on($('#lightbox'), 'click', (e) => { if (e.target.id === 'lightbox') closeLightbox(); });
 
   // Load data (cache-busted) & render
   const bust = Date.now();
@@ -107,7 +109,7 @@ document.addEventListener('DOMContentLoaded', () => {
     .catch(err => console.error('Error loading YAML:', err));
 });
 
-// ===== UI adaptation =====
+// ===== UI adaptation (all null-safe) =====
 function adaptUI(ctx) {
   const {
     haveCelebrations, haveAchievements,
@@ -115,12 +117,12 @@ function adaptUI(ctx) {
     viewCelebrations, viewAchievements
   } = ctx;
 
-  if (!haveCelebrations) {
+  if (!haveCelebrations && tabCelebrations && viewCelebrations) {
     tabCelebrations.style.display = 'none';
     viewCelebrations.classList.remove('active');
     viewCelebrations.style.display = 'none';
   }
-  if (!haveAchievements) {
+  if (!haveAchievements && tabAchievements && viewAchievements) {
     tabAchievements.style.display = 'none';
     viewAchievements.classList.remove('active');
     viewAchievements.style.display = 'none';
@@ -128,38 +130,44 @@ function adaptUI(ctx) {
 
   if (!haveCelebrations && !haveAchievements) {
     if (tabsContainer) tabsContainer.style.display = 'none';
-    const main = document.querySelector('.container');
-    const empty = document.createElement('div');
-    empty.style.margin = '24px 0';
-    empty.style.color = 'var(--muted)';
-    empty.textContent = 'No celebrations or achievements to show.';
-    main.appendChild(empty);
+    const main = $('.container');
+    if (main) {
+      const empty = document.createElement('div');
+      empty.style.margin = '24px 0';
+      empty.style.color = 'var(--muted)';
+      empty.textContent = 'No celebrations or achievements to show.';
+      main.appendChild(empty);
+    }
     return;
   }
 
   if (haveCelebrations && !haveAchievements) {
-    activateTab(tabCelebrations, viewCelebrations);
+    if (tabCelebrations && viewCelebrations) activateTab(tabCelebrations, viewCelebrations);
     if (tabsContainer) tabsContainer.style.display = 'none';
   } else if (!haveCelebrations && haveAchievements) {
-    activateTab(tabAchievements, viewAchievements);
+    if (tabAchievements && viewAchievements) activateTab(tabAchievements, viewAchievements);
     if (tabsContainer) tabsContainer.style.display = 'none';
   } else {
-    if (!tabCelebrations.classList.contains('active') &&
-        !tabAchievements.classList.contains('active')) {
-      activateTab(tabCelebrations, viewCelebrations);
-      deactivateTab(tabAchievements, viewAchievements);
+    if (tabCelebrations && tabAchievements && viewCelebrations && viewAchievements) {
+      if (!tabCelebrations.classList.contains('active') &&
+          !tabAchievements.classList.contains('active')) {
+        activateTab(tabCelebrations, viewCelebrations);
+        deactivateTab(tabAchievements, viewAchievements);
+      }
     }
   }
 }
 
 // ===== Tabs helpers =====
 function activateTab(tabBtn, viewEl) {
+  if (!tabBtn || !viewEl) return;
   tabBtn.classList.add('active');
   tabBtn.setAttribute('aria-selected', 'true');
   viewEl.classList.add('active');
   viewEl.style.display = 'block';
 }
 function deactivateTab(tabBtn, viewEl) {
+  if (!tabBtn || !viewEl) return;
   tabBtn.classList.remove('active');
   tabBtn.setAttribute('aria-selected', 'false');
   viewEl.classList.remove('active');
@@ -168,7 +176,8 @@ function deactivateTab(tabBtn, viewEl) {
 
 // ===== Celebrations =====
 function renderCalendar(events) {
-  const calendar = document.getElementById('calendar');
+  const calendar = $('#calendar');
+  if (!calendar) return;
   calendar.innerHTML = '';
 
   const today = new Date();
@@ -180,6 +189,7 @@ function renderCalendar(events) {
     const mm = parseInt(month, 10) - 1;
     let yy = parseInt(year, 10);
 
+    // 2-digit years supported: 00–69 => 2000+, 70–99 => 1900+
     if (!Number.isFinite(yy)) yy = currentYear;
     else if (year && year.length === 2) yy = yy <= 69 ? 2000 + yy : 1900 + yy;
 
@@ -225,7 +235,8 @@ function renderCalendar(events) {
 
 // ===== Achievements (auto-gallery by title or explicit images) =====
 function renderAchievements(items, assetsBase) {
-  const container = document.getElementById('achievementsList');
+  const container = $('#achievementsList');
+  if (!container) return;
   container.innerHTML = '';
 
   const parsed = items
@@ -340,8 +351,9 @@ function isImageFile(name) { return /\.(png|jpe?g|webp|gif|bmp|svg)$/i.test(name
 
 // ===== Chart (XY or fallback) =====
 function renderAchievementsChart(items) {
-  const canvas = document.getElementById('achievementsChart');
-  const note   = document.getElementById('chartNote');
+  const canvas = $('#achievementsChart');
+  const note   = $('#chartNote');
+  if (!canvas) return;
 
   canvas.style.height = '280px';   // hard-lock to prevent reflow/CPU loop
 
@@ -368,7 +380,7 @@ function renderAchievementsChart(items) {
       data: { datasets: [{ label: 'Achievements', data: xyPoints, pointRadius: 5 }] },
       options: opts
     });
-    note.textContent = 'Showing XY scatter from achievement data.';
+    if (note) note.textContent = 'Showing XY scatter from achievement data.';
   } else {
     const byYear = {};
     items.forEach(a => {
@@ -383,7 +395,7 @@ function renderAchievementsChart(items) {
       data: { labels, datasets: [{ label: 'Achievements per Year', data: counts }] },
       options: opts
     });
-    note.textContent = 'No XY data found; showing achievements per year.';
+    if (note) note.textContent = 'No XY data found; showing achievements per year.';
   }
 }
 
@@ -392,13 +404,18 @@ function openLightbox(images, index = 0) {
   lightboxState.images = images || [];
   lightboxState.index = Math.max(0, Math.min(index, images.length - 1));
   updateLightbox();
-  const lb = document.getElementById('lightbox');
-  lb.hidden = false;
-  document.body.style.overflow = 'hidden';
+  const lb = $('#lightbox');
+  if (lb) {
+    lb.hidden = false;
+    document.body.style.overflow = 'hidden';
+  }
 }
 function closeLightbox() {
-  document.getElementById('lightbox').hidden = true;
-  document.body.style.overflow = '';
+  const lb = $('#lightbox');
+  if (lb) {
+    lb.hidden = true;
+    document.body.style.overflow = '';
+  }
 }
 function navLightbox(delta) {
   if (!lightboxState.images.length) return;
@@ -406,8 +423,8 @@ function navLightbox(delta) {
   updateLightbox();
 }
 function updateLightbox() {
-  const img = document.getElementById('lightboxImg');
-  img.src = lightboxState.images[lightboxState.index];
+  const img = $('#lightboxImg');
+  if (img) img.src = lightboxState.images[lightboxState.index];
 }
 
 // ===== Utils =====
@@ -434,7 +451,10 @@ function parseDDMMYYYY(s) {
   const d = new Date(yy, month, day);
   return isNaN(d.getTime()) ? null : d;
 }
-function ensureTrailingSlash(p) { return p && p.endsWith('/') ? p : (p || '/') + (p?.endsWith('/') ? '' : '/'); }
+function ensureTrailingSlash(p) {
+  if (!p) return '/';
+  return p.endsWith('/') ? p : p + '/';
+}
 function resolveImageSrc(src, base) {
   if (!src) return '';
   if (/^([a-z]+:)?\/\//i.test(src) || src.startsWith('/')) return src;

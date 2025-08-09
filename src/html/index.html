@@ -1,12 +1,12 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="celebrations">
+<html lang="en" data-theme="light">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Web-Celebration</title>
   <link rel="stylesheet" href="styles.css" />
 
-  <!-- Font Awesome for Icons -->
+  <!-- Font Awesome -->
   <link
     rel="stylesheet"
     href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
@@ -17,8 +17,7 @@
   <!-- js-yaml -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/js-yaml/4.1.0/js-yaml.min.js"
           crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-
-  <!-- Chart.js for XY / fallback charts -->
+  <!-- Chart.js -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"
           crossorigin="anonymous"></script>
 </head>
@@ -39,45 +38,38 @@
         </button>
       </div>
 
-      <label class="theme-switch">
-        <span><i class="fa-solid fa-palette"></i> Theme</span>
-        <select id="themeSelect" aria-label="Theme">
-          <option value="celebrations">Celebrations</option>
-          <option value="achievements">Achievements</option>
-        </select>
-      </label>
+      <!-- New: theme toggle (sun/moon) -->
+      <button id="themeToggle" class="icon-btn" aria-label="Switch to dark mode" title="Toggle theme">
+        <i class="fa-solid fa-moon"></i>
+      </button>
     </div>
   </header>
 
   <main class="container">
-    <!-- Celebrations (existing vertical timeline) -->
+    <!-- Celebrations -->
     <section id="view-celebrations" class="view active" aria-labelledby="tab-celebrations">
       <h1>Celebrations Calendar</h1>
       <div id="calendar"></div>
     </section>
 
-    <!-- New: Achievements (top-down page) -->
+    <!-- Achievements -->
     <section id="view-achievements" class="view" aria-labelledby="tab-achievements">
       <div class="achievements-header">
         <h1>Life Achievements</h1>
-        <p class="subtitle">
-          A top-down list of milestones with image galleries and an XY chart.
-        </p>
+        <p class="subtitle">A top-down list of milestones with image galleries and an XY chart.</p>
       </div>
 
-      <!-- Chart -->
       <div class="chart-card">
         <h2><i class="fa-solid fa-chart-scatter"></i> Achievements — XY Chart</h2>
         <canvas id="achievementsChart" height="220"></canvas>
         <div class="chart-note" id="chartNote"></div>
       </div>
 
-      <!-- Achievements list -->
       <div id="achievementsList" class="achievements-list"></div>
     </section>
   </main>
 
-  <!-- Lightbox modal for image galleries -->
+  <!-- Lightbox -->
   <div id="lightbox" class="lightbox" aria-modal="true" role="dialog" hidden>
     <button class="lightbox-close" id="lightboxClose" aria-label="Close">
       <i class="fa-solid fa-xmark"></i>

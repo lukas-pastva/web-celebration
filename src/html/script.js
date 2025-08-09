@@ -351,12 +351,11 @@ function isImageFile(name) { return /\.(png|jpe?g|webp|gif|bmp|svg)$/i.test(name
 
 // ===== Chart (XY or fallback) =====
 function renderAchievementsChart(items) {
-  const canvas = $('#achievementsChart');
-  const note   = $('#chartNote');
+  const canvas = document.getElementById('achievementsChart');
+  const note   = document.getElementById('chartNote');
   if (!canvas) return;
 
-  canvas.style.height = '280px';   // hard-lock to prevent reflow/CPU loop
-
+  // Kill any previous instance (prevents multiple ResizeObservers)
   if (achievementsChart) { achievementsChart.destroy(); achievementsChart = null; }
 
   const xyPoints = items
@@ -364,7 +363,10 @@ function renderAchievementsChart(items) {
     .map(a => ({ x: Number(a.xy.x), y: Number(a.xy.y), title: a.title || '' }));
 
   const opts = {
-    responsive: true, maintainAspectRatio: false, animation: false,
+    responsive: true,
+    maintainAspectRatio: false,
+    animation: false,
+    devicePixelRatio: Math.min(window.devicePixelRatio || 1, 2), // optional: cap DPR to tame scaling
     plugins: {
       legend: { display: false },
       tooltip: { callbacks: { label: (ctx) => {
@@ -383,10 +385,7 @@ function renderAchievementsChart(items) {
     if (note) note.textContent = 'Showing XY scatter from achievement data.';
   } else {
     const byYear = {};
-    items.forEach(a => {
-      const d = parseDDMMYYYY(a.date); if (!d) return;
-      const y = d.getFullYear(); byYear[y] = (byYear[y] || 0) + 1;
-    });
+    items.forEach(a => { const d = parseDDMMYYYY(a.date); if (d) byYear[d.getFullYear()] = (byYear[d.getFullYear()] || 0) + 1; });
     const labels = Object.keys(byYear).sort((a,b) => +a - +b);
     const counts = labels.map(y => byYear[y]);
 
@@ -398,6 +397,7 @@ function renderAchievementsChart(items) {
     if (note) note.textContent = 'No XY data found; showing achievements per year.';
   }
 }
+
 
 // ===== Lightbox =====
 function openLightbox(images, index = 0) {

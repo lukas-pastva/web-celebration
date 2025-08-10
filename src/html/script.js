@@ -7,6 +7,10 @@ const eventIcons = {
   wedding: 'fa-ring',
 };
 
+let ALL_ACH = [];
+let ASSETS_BASE = '';
+const FILTER_KEY = 'wc_type_filter';
+
 // ===== State =====
 let lightboxState = { images: [], index: 0 };
 let achievementsChart = null; // prevent duplicate charts
@@ -46,6 +50,68 @@ function updateThemeToggleIcon(theme) {
     btn.setAttribute('aria-label', 'Switch to dark mode');
     btn.title = 'Switch to dark mode';
   }
+}
+function normTypes(val) {
+  // Accept: "type", "type1,type2", ["type1","type2"], or undefined
+  let arr = [];
+  if (Array.isArray(val)) arr = val;
+  else if (typeof val === 'string') arr = val.split(/[,\|]/);
+  return arr.map(s => s.trim().toLowerCase()).filter(Boolean);
+}
+function titlecase(s) { return String(s).replace(/\b\w/g, c => c.toUpperCase()); }
+
+function getFilteredAchievements() {
+  const select = document.getElementById('typeSelect');
+  const sel = select ? select.value : '__all';
+  if (sel === '__all') return ALL_ACH;
+  if (sel === '__untagged') return ALL_ACH.filter(a => normTypes(a.type).length === 0);
+  return ALL_ACH.filter(a => normTypes(a.type).includes(sel));
+}
+
+function renderFiltered() {
+  const items = getFilteredAchievements();
+  renderAchievements(items, ASSETS_BASE);
+  renderAchievementsChart(items);
+}
+
+// Build the filter UI dynamically
+function setupTypeFilter(items) {
+  const wrap = document.getElementById('typeFilter');
+  const sel  = document.getElementById('typeSelect');
+  if (!wrap || !sel) return;
+
+  const set = new Set();
+  let hasUntagged = false;
+  items.forEach(a => {
+    const t = normTypes(a.type);
+    if (t.length === 0) hasUntagged = true;
+    t.forEach(x => set.add(x));
+  });
+
+  const types = Array.from(set).sort();
+  const shouldShow = (types.length > 1) || hasUntagged;
+  if (!shouldShow) { wrap.hidden = true; return; }
+
+  // Build options
+  sel.innerHTML = '';
+  const opt = (value, label) => {
+    const o = document.createElement('option');
+    o.value = value; o.textContent = label; return o;
+  };
+  sel.appendChild(opt('__all', 'All types'));
+  types.forEach(t => sel.appendChild(opt(t, titlecase(t))));
+  if (hasUntagged) sel.appendChild(opt('__untagged', 'Unlabeled'));
+
+  // Restore saved selection if valid
+  const valid = new Set(['__all','__untagged', ...types]);
+  const saved = localStorage.getItem(FILTER_KEY);
+  sel.value = (saved && valid.has(saved)) ? saved : '__all';
+
+  wrap.hidden = false;
+  on(sel, 'change', () => {
+    localStorage.setItem(FILTER_KEY, sel.value);
+    renderFiltered();
+  });
 }
 
 // ===== Boot =====
@@ -88,19 +154,8 @@ document.addEventListener('DOMContentLoaded', () => {
   fetch(`celebrations.yaml?t=${bust}`, { cache: 'no-store' })
     .then(r => r.text())
     .then(yamlText => {
+      // after we parse YAML:
       const data = jsyaml.load(yamlText) || {};
-      const siteTitle = (typeof data.site_title === 'string' && data.site_title.trim())
-        ? data.site_title.trim()
-        : 'Web-Celebration';
-      document.title = siteTitle;
-      const bn = $('#brandName');
-      if (bn) bn.textContent = siteTitle;
-
-      const intro = (typeof data.intro === 'string') ? data.intro : '';
-      const introEl = $('#introText');
-      if (introEl && intro.trim()) {
-        introEl.innerHTML = linkify(intro);
-      }
       const celebrations = Array.isArray(data.celebrations) ? data.celebrations : [];
       const achievements = Array.isArray(data.achievements) ? data.achievements : [];
 
@@ -108,13 +163,28 @@ document.addEventListener('DOMContentLoaded', () => {
         typeof data.assets_base_path === 'string' ? data.assets_base_path : '/data/'
       );
 
-      const haveCelebrations = celebrations.length > 0;
-      const haveAchievements = achievements.length > 0;
+      // Set site title + intro (you already added earlier)
+      const siteTitle = (typeof data.site_title === 'string' && data.site_title.trim())
+        ? data.site_title.trim()
+        : 'Web-Celebration';
+      document.title = siteTitle;
+      const bn = $('#brandName'); if (bn) bn.textContent = siteTitle;
 
+      const intro = (typeof data.intro === 'string') ? data.intro : '';
+      const introEl = $('#introText'); if (introEl && intro.trim()) introEl.innerHTML = linkify(intro);
+
+      // Celebrations
+      const haveCelebrations = celebrations.length > 0;
       if (haveCelebrations) renderCalendar(celebrations);
+
+      // Achievements with filter
+      const haveAchievements = achievements.length > 0;
+      ALL_ACH = achievements;
+      ASSETS_BASE = assetsBase;
+
       if (haveAchievements) {
-        renderAchievements(achievements, assetsBase);
-        renderAchievementsChart(achievements);
+        setupTypeFilter(ALL_ACH);
+        renderFiltered();           // renders BOTH list + chart using the current filter
       }
 
       adaptUI({
@@ -122,6 +192,8 @@ document.addEventListener('DOMContentLoaded', () => {
         tabsContainer, tabCelebrations, tabAchievements,
         viewCelebrations, viewAchievements
       });
+
+
     })
     .catch(err => console.error('Error loading YAML:', err));
 });
@@ -255,6 +327,15 @@ function renderAchievements(items, assetsBase) {
   const container = $('#achievementsList');
   if (!container) return;
   container.innerHTML = '';
+
+  if (!items.length) {
+    const empty = document.createElement('div');
+    empty.style.color = 'var(--muted)';
+    empty.style.fontSize = '14px';
+    empty.textContent = 'No achievements match this filter.';
+    container.appendChild(empty);
+    return;
+  }
 
   const parsed = items
     .map(a => ({ ...a, parsedDate: parseDDMMYYYY(a.date) }))

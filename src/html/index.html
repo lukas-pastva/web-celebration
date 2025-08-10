@@ -59,8 +59,18 @@
       <!-- Achievements header -->
       <div class="achievements-header">
         <h1>Life Achievements</h1>
-        <p id="introText" class="subtitle">A top-down list of milestones with image galleries and an XY chart.</p>
+        <p id="introText" class="subtitle">
+          A top-down list of milestones with image galleries and an XY chart.
+        </p>
       </div>
+
+      <!-- NEW: Type filter (hidden until we detect >1 type) -->
+      <div id="typeFilter" class="type-filter" hidden>
+        <i class="fa-solid fa-filter"></i>
+        <label for="typeSelect" class="sr-only">Filter by type</label>
+        <select id="typeSelect" aria-label="Filter achievements by type"></select>
+      </div>
+
 
       <div class="chart-card">
         <h2><i class="fa-solid fa-chart-scatter"></i> Achievements — XY Chart</h2>

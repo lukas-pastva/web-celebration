@@ -65,7 +65,7 @@ function djb2(str) { let h = 5381; for (let i = 0; i < str.length; i++) h = ((h 
 function colorForType(t) {
   const key = String((t || 'other')).toLowerCase();
   const hue = djb2(key) % 360;
-  const sat = 60;                          // fairly soft
+  const sat = 60;
   const light = currentTheme() === 'dark' ? 60 : 52;
   return `hsl(${hue}, ${sat}%, ${light}%)`;
 }
@@ -90,13 +90,26 @@ function persistChipSelection() {
   if (SELECTED_TYPES.has('__all')) localStorage.setItem(FILTER_KEY, JSON.stringify(['__all']));
   else localStorage.setItem(FILTER_KEY, JSON.stringify(Array.from(SELECTED_TYPES)));
 }
+
+// colored chip
 function makeChip(value, label) {
   const btn = document.createElement('button');
   btn.type = 'button';
   btn.className = 'chip';
   btn.setAttribute('data-value', value);
   btn.setAttribute('aria-pressed', SELECTED_TYPES.has(value) ? 'true' : 'false');
-  btn.textContent = label;
+
+  // Give type chips their own tint; neutral for special chips
+  if (value !== '__all' && value !== '__untagged') {
+    const tint = colorForType(value);
+    btn.style.setProperty('--tint', tint);
+    btn.innerHTML = `<span class="dot" aria-hidden="true"></span>${escapeHTML(label)}`;
+  } else {
+    // keep "All" and "Untagged" readable; still slightly tinted with accent
+    btn.style.setProperty('--tint', 'var(--accent)');
+    btn.textContent = label;
+  }
+
   btn.addEventListener('click', () => {
     if (value === '__all') SELECTED_TYPES = new Set(['__all']);
     else {
@@ -110,6 +123,7 @@ function makeChip(value, label) {
   });
   return btn;
 }
+
 function updateChipPressedStates() {
   const chipsHost = document.getElementById('typeChips');
   if (!chipsHost) return;
@@ -118,6 +132,7 @@ function updateChipPressedStates() {
     chip.setAttribute('aria-pressed', SELECTED_TYPES.has(v) ? 'true' : 'false');
   });
 }
+
 function setupTypeChips(items) {
   const wrap = document.getElementById('typeFilter');
   const chipsHost = document.getElementById('typeChips');
@@ -143,6 +158,7 @@ function setupTypeChips(items) {
   updateChipPressedStates();
   wrap.hidden = false;
 }
+
 function getFilteredAchievements() {
   if (SELECTED_TYPES.has('__all')) return ALL_ACH;
   return ALL_ACH.filter(a => {
@@ -364,20 +380,8 @@ function externalTooltipHandler(context) {
 }
 
 // ===== Tabs helpers =====
-function activateTab(tabBtn, viewEl) {
-  if (!tabBtn || !viewEl) return;
-  tabBtn.classList.add('active');
-  tabBtn.setAttribute('aria-selected', 'true');
-  viewEl.classList.add('active');
-  viewEl.style.display = 'block';
-}
-function deactivateTab(tabBtn, viewEl) {
-  if (!tabBtn || !viewEl) return;
-  tabBtn.classList.remove('active');
-  tabBtn.setAttribute('aria-selected', 'false');
-  viewEl.classList.remove('active');
-  viewEl.style.display = 'none';
-}
+function activateTab(tabBtn, viewEl) { if (!tabBtn || !viewEl) return; tabBtn.classList.add('active'); tabBtn.setAttribute('aria-selected','true'); viewEl.classList.add('active'); viewEl.style.display='block'; }
+function deactivateTab(tabBtn, viewEl) { if (!tabBtn || !viewEl) return; tabBtn.classList.remove('active'); tabBtn.setAttribute('aria-selected','false'); viewEl.classList.remove('active'); viewEl.style.display='none'; }
 
 // ===== Celebrations =====
 function renderCalendar(events) {
@@ -394,7 +398,6 @@ function renderCalendar(events) {
     const mm = parseInt(month, 10) - 1;
     let yy = parseInt(year, 10);
 
-    // 2-digit years supported
     if (!Number.isFinite(yy)) yy = currentYear;
     else if (year && year.length === 2) yy = yy <= 69 ? 2000 + yy : 1900 + yy;
 
@@ -414,7 +417,6 @@ function renderCalendar(events) {
     const contentDiv = document.createElement('div');
     contentDiv.classList.add('content');
 
-    // per-type tint
     const tint = colorForType(event.type);
     contentDiv.style.setProperty('--tint', tint);
 
@@ -488,7 +490,6 @@ function renderAchievements(items, assetsBase) {
     card.dataset.key = key;
     MAP_ACH.set(key, a);
 
-    // choose primary tint from first type (if any)
     const types = normTypes(a.type);
     const primaryTint = colorForType(types[0] || 'other');
     card.style.setProperty('--tint', primaryTint);
@@ -517,7 +518,6 @@ function renderAchievements(items, assetsBase) {
 
     card.appendChild(header);
 
-    // type pills row (can be multiple)
     if (types.length) {
       const row = document.createElement('div');
       row.className = 'type-row';
@@ -653,7 +653,7 @@ function fetchFirstImage(a, assetsBase) {
 const MONTH_ABBR = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 function fractionalYear(d) {
   const y = d.getFullYear();
-  const m = d.getMonth();        // 0..11
+  const m = d.getMonth();
   const days = new Date(y, m + 1, 0).getDate();
   const day = d.getDate();
   const frac = m / 12 + ((day - 1) / days) / 12;
@@ -766,7 +766,6 @@ function renderAchievementsChart(items) {
             pointHoverRadius: 13,
             hitRadius: 16,
             borderWidth: 2,
-            // keep stars yellow for rating look (as requested earlier)
             pointBackgroundColor: '#f1c40f',
             pointBorderColor: '#f1c40f',
             pointHoverBackgroundColor: '#f1c40f',

@@ -5,8 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Web-Celebration</title>
   <link rel="stylesheet" href="styles.css" />
-  <!-- … keep the rest … -->
-  <link rel="icon" href="data:,"> <!-- stops /favicon.ico 404 -->
+  <link rel="icon" href="data:,">
   <!-- Font Awesome -->
   <link
     rel="stylesheet"
@@ -14,7 +13,6 @@
     crossorigin="anonymous"
     referrerpolicy="no-referrer"
   />
-
   <!-- js-yaml -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/js-yaml/4.1.0/js-yaml.min.js"
           crossorigin="anonymous" referrerpolicy="no-referrer"></script>
@@ -40,7 +38,7 @@
         </button>
       </div>
 
-      <!-- New: theme toggle (sun/moon) -->
+      <!-- theme toggle (sun/moon) -->
       <button id="themeToggle" class="icon-btn" aria-label="Switch to dark mode" title="Toggle theme">
         <i class="fa-solid fa-moon"></i>
       </button>
@@ -64,12 +62,11 @@
         </p>
       </div>
 
-      <!-- NEW: Type filter (hidden until we detect >1 type) -->
+      <!-- Type filter (appears only if >1 type or untagged exist) -->
       <div id="typeFilter" class="type-filter" hidden>
         <i class="fa-solid fa-filter"></i>
         <div id="typeChips" class="chip-wrap" role="group" aria-label="Filter achievements by type"></div>
       </div>
-
 
       <div class="chart-card">
         <h2><i class="fa-solid fa-chart-scatter"></i> Achievements — XY Chart</h2>
@@ -97,6 +94,7 @@
     </button>
   </div>
 
-  <script src="script.js?v=2025-08-09-05"></script>
+  <!-- bump the query to bust Cloudflare caches -->
+  <script src="script.js?v=2025-08-10-02"></script>
 </body>
 </html>

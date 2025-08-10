@@ -7,17 +7,27 @@ const eventIcons = {
   wedding: 'fa-ring',
 };
 
+// ===== Global state (achievements + filtering) =====
 let ALL_ACH = [];
 let ASSETS_BASE = '';
-let CHIPS_TYPES = [];       // discovered normalized types
+let CHIPS_TYPES = [];                 // discovered types
 let HAS_UNTAGGED = false;
 let SELECTED_TYPES = new Set();
 const FILTER_KEY = 'wc_type_filter_v2';
-let FIRST_IMG = new Map();        // key -> first image URL
+let FIRST_IMG = new Map();            // key -> first image URL
+let MAP_ACH = new Map();              // key -> achievement object
 
-// ===== State =====
+// ===== Chart tooltip pinning state =====
+let TOOLTIP_PINNED = false;
+let PINNED_DATA = null;               // raw data object of the pinned point
+let PINNED_POS = null;                // {left, top} viewport coords of anchor
+let LAST_TOOLTIP_POS = null;          // remember last hover position
+
+// ===== Lightbox state =====
 let lightboxState = { images: [], index: 0 };
-let achievementsChart = null; // prevent duplicate charts
+let achievementsChart = null;         // prevent duplicate charts
+
+// ===== Theme =====
 const THEME_KEY = 'wc_theme';
 
 // ===== Safe helpers =====
@@ -55,6 +65,8 @@ function updateThemeToggleIcon(theme) {
     btn.title = 'Switch to dark mode';
   }
 }
+
+// ===== Type helpers (chips) =====
 function normTypes(val) {
   let arr = [];
   if (Array.isArray(val)) arr = val;
@@ -64,26 +76,60 @@ function normTypes(val) {
 function titlecase(s) {
   return String(s).replace(/\b([a-z])/g, m => m.toUpperCase()).replace(/[-_]/g, ' ');
 }
-function getFilteredAchievements() {
-  const select = document.getElementById('typeSelect');
-  const sel = select ? select.value : '__all';
-  if (sel === '__all') return ALL_ACH;
-  if (sel === '__untagged') return ALL_ACH.filter(a => normTypes(a.type).length === 0);
-  return ALL_ACH.filter(a => normTypes(a.type).includes(sel));
+function restoreChipSelection() {
+  try {
+    const raw = localStorage.getItem(FILTER_KEY);
+    if (!raw) return new Set(['__all']);
+    const arr = JSON.parse(raw);
+    if (Array.isArray(arr) && arr.length) return new Set(arr);
+  } catch {}
+  return new Set(['__all']);
 }
-
-function renderFiltered() {
-  const items = getFilteredAchievements();
-  renderAchievements(items, ASSETS_BASE);
-  renderAchievementsChart(items);
+function persistChipSelection() {
+  if (SELECTED_TYPES.has('__all')) {
+    localStorage.setItem(FILTER_KEY, JSON.stringify(['__all']));
+  } else {
+    localStorage.setItem(FILTER_KEY, JSON.stringify(Array.from(SELECTED_TYPES)));
+  }
 }
+function makeChip(value, label) {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'chip';
+  btn.setAttribute('data-value', value);
+  btn.setAttribute('aria-pressed', SELECTED_TYPES.has(value) ? 'true' : 'false');
+  btn.textContent = label;
 
+  btn.addEventListener('click', () => {
+    if (value === '__all') {
+      SELECTED_TYPES = new Set(['__all']);
+    } else {
+      SELECTED_TYPES.delete('__all');
+      if (SELECTED_TYPES.has(value)) SELECTED_TYPES.delete(value);
+      else SELECTED_TYPES.add(value);
+      if (SELECTED_TYPES.size === 0) SELECTED_TYPES.add('__all');
+    }
+    persistChipSelection();
+    updateChipPressedStates();
+    renderFiltered();
+  });
+
+  return btn;
+}
+function updateChipPressedStates() {
+  const chipsHost = document.getElementById('typeChips');
+  if (!chipsHost) return;
+  const chips = chipsHost.querySelectorAll('.chip');
+  chips.forEach(chip => {
+    const v = chip.getAttribute('data-value');
+    chip.setAttribute('aria-pressed', SELECTED_TYPES.has(v) ? 'true' : 'false');
+  });
+}
 function setupTypeChips(items) {
   const wrap = document.getElementById('typeFilter');
   const chipsHost = document.getElementById('typeChips');
   if (!wrap || !chipsHost) return;
 
-  // Discover types
   const set = new Set();
   HAS_UNTAGGED = false;
   items.forEach(a => {
@@ -96,79 +142,16 @@ function setupTypeChips(items) {
   const shouldShow = (CHIPS_TYPES.length > 1) || HAS_UNTAGGED;
   if (!shouldShow) { wrap.hidden = true; return; }
 
-  // Restore selection
   SELECTED_TYPES = restoreChipSelection();
 
-  // Build chips
   chipsHost.innerHTML = '';
-  // "All" convenience chip
   chipsHost.appendChild(makeChip('__all', 'All'));
-
   CHIPS_TYPES.forEach(t => chipsHost.appendChild(makeChip(t, titlecase(t))));
   if (HAS_UNTAGGED) chipsHost.appendChild(makeChip('__untagged', 'Untagged'));
 
-  // Reflect selection
   updateChipPressedStates();
   wrap.hidden = false;
 }
-
-function makeChip(value, label) {
-  const btn = document.createElement('button');
-  btn.type = 'button';
-  btn.className = 'chip';
-  btn.setAttribute('data-value', value);
-  btn.setAttribute('aria-pressed', SELECTED_TYPES.has(value) ? 'true' : 'false');
-  btn.textContent = label;
-
-  btn.addEventListener('click', () => {
-    if (value === '__all') {
-      // Selecting "All" deselects others
-      SELECTED_TYPES = new Set(['__all']);
-    } else {
-      // Toggle value
-      SELECTED_TYPES.delete('__all');
-      if (SELECTED_TYPES.has(value)) SELECTED_TYPES.delete(value);
-      else SELECTED_TYPES.add(value);
-
-      // If nothing left, revert to "All"
-      if (SELECTED_TYPES.size === 0) SELECTED_TYPES.add('__all');
-    }
-    persistChipSelection();
-    updateChipPressedStates();
-    renderFiltered();
-  });
-
-  return btn;
-}
-
-function updateChipPressedStates() {
-  const chipsHost = document.getElementById('typeChips');
-  if (!chipsHost) return;
-  const chips = chipsHost.querySelectorAll('.chip');
-  chips.forEach(chip => {
-    const v = chip.getAttribute('data-value');
-    chip.setAttribute('aria-pressed', SELECTED_TYPES.has(v) ? 'true' : 'false');
-  });
-}
-
-function persistChipSelection() {
-  if (SELECTED_TYPES.has('__all')) {
-    localStorage.setItem(FILTER_KEY, JSON.stringify(['__all']));
-  } else {
-    localStorage.setItem(FILTER_KEY, JSON.stringify(Array.from(SELECTED_TYPES)));
-  }
-}
-
-function restoreChipSelection() {
-  try {
-    const raw = localStorage.getItem(FILTER_KEY);
-    if (!raw) return new Set(['__all']);
-    const arr = JSON.parse(raw);
-    if (Array.isArray(arr) && arr.length) return new Set(arr);
-  } catch {}
-  return new Set(['__all']);
-}
-
 function getFilteredAchievements() {
   if (SELECTED_TYPES.has('__all')) return ALL_ACH;
   return ALL_ACH.filter(a => {
@@ -178,54 +161,28 @@ function getFilteredAchievements() {
     return matchTagged || matchUntagged;
   });
 }
-
 function renderFiltered() {
   const items = getFilteredAchievements();
   renderAchievements(items, ASSETS_BASE);
   renderAchievementsChart(items);
 }
-function achKey(a) {
-  return `${slugify(a.title || '')}_${(a.date || '').trim()}`;
-}
-
-function fetchFirstImage(a, assetsBase) {
-  // 1) explicit images
-  if (Array.isArray(a.images) && a.images.length) {
-    return Promise.resolve(resolveImageSrc(a.images[0], assetsBase));
-  }
-  // 2) manifest, then autoindex fallback
-  const folder = slugify(a.title || 'achievement');
-  const manifestUrl = `/_gallery/${folder}.json?t=${Date.now()}`;
-  const dirUrl = ensureTrailingSlash(assetsBase) + folder + '/';
-
-  return fetch(manifestUrl, { cache: 'no-store' })
-    .then(r => (r.ok ? r.json() : Promise.reject()))
-    .then(j => (Array.isArray(j.images) && j.images.length ? j.images[0] : null))
-    .catch(() => listImagesInDir(dirUrl).then(arr => (arr[0] || null)))
-    .catch(() => null);
-}
-
-function prefetchFirstImages(items, assetsBase) {
-  const tasks = items.map(a => {
-    const key = achKey(a);
-    if (FIRST_IMG.has(key)) return Promise.resolve();
-    return fetchFirstImage(a, assetsBase).then(u => { if (u) FIRST_IMG.set(key, u); });
-  });
-  return Promise.allSettled(tasks);
-}
 
 // ===== Boot =====
 document.addEventListener('DOMContentLoaded', () => {
-  // Theme (guarded)
+  // Theme
   setTheme(preferredTheme());
   on($('#themeToggle'), 'click', () => setTheme(currentTheme() === 'light' ? 'dark' : 'light'));
+
+  // Esc closes lightbox or unpins tooltip
   on(document, 'keydown', (e) => {
     if (e.key === 'Escape' || e.key === 'Esc') {
       const lb = $('#lightbox');
-      if (lb && !lb.hidden) closeLightbox();
+      if (lb && !lb.hidden) { closeLightbox(); return; }
+      if (TOOLTIP_PINNED) { unpinTooltip(); }
     }
   });
-  // Tabs & views (guarded)
+
+  // Tabs & views
   const tabsContainer     = $('.tabs');
   const tabCelebrations   = $('#tab-celebrations');
   const tabAchievements   = $('#tab-achievements');
@@ -243,7 +200,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (achievementsChart) achievementsChart.resize();
   });
 
-  // Lightbox (guarded)
+  // Lightbox
   on($('#lightboxClose'), 'click', closeLightbox);
   on($('#lightboxPrev'),  'click', () => navLightbox(-1));
   on($('#lightboxNext'),  'click', () => navLightbox(1));
@@ -254,7 +211,6 @@ document.addEventListener('DOMContentLoaded', () => {
   fetch(`celebrations.yaml?t=${bust}`, { cache: 'no-store' })
     .then(r => r.text())
     .then(yamlText => {
-      // after we parse YAML:
       const data = jsyaml.load(yamlText) || {};
       const celebrations = Array.isArray(data.celebrations) ? data.celebrations : [];
       const achievements = Array.isArray(data.achievements) ? data.achievements : [];
@@ -263,7 +219,7 @@ document.addEventListener('DOMContentLoaded', () => {
         typeof data.assets_base_path === 'string' ? data.assets_base_path : '/data/'
       );
 
-      // Set site title + intro (you already added earlier)
+      // Site title + intro
       const siteTitle = (typeof data.site_title === 'string' && data.site_title.trim())
         ? data.site_title.trim()
         : 'Web-Celebration';
@@ -272,6 +228,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
       const intro = (typeof data.intro === 'string') ? data.intro : '';
       const introEl = $('#introText'); if (introEl && intro.trim()) introEl.innerHTML = linkify(intro);
+
       const haveCelebrations = celebrations.length > 0;
       const haveAchievements = achievements.length > 0;
 
@@ -281,8 +238,8 @@ document.addEventListener('DOMContentLoaded', () => {
       ASSETS_BASE = assetsBase;
 
       if (haveAchievements) {
-        setupTypeChips(ALL_ACH); // builds chips and selection
-        renderFiltered();        // renders list + chart using current multi-select
+        setupTypeChips(ALL_ACH); // builds chips & selection
+        renderFiltered();        // renders list + chart
       }
 
       adaptUI({
@@ -290,7 +247,6 @@ document.addEventListener('DOMContentLoaded', () => {
         tabsContainer, tabCelebrations, tabAchievements,
         viewCelebrations, viewAchievements
       });
-
     })
     .catch(err => console.error('Error loading YAML:', err));
 });
@@ -343,10 +299,12 @@ function adaptUI(ctx) {
     }
   }
 }
+
+// ===== Global, fixed tooltip handler (never clipped) =====
 function externalTooltipHandler(context) {
   const { chart, tooltip } = context;
 
-  // One global tooltip element
+  // one tooltip element on <body>
   let el = document.getElementById('chart-tooltip');
   if (!el) {
     el = document.createElement('div');
@@ -356,52 +314,71 @@ function externalTooltipHandler(context) {
     document.body.appendChild(el);
   }
 
-  if (tooltip.opacity === 0) {
+  const rect = chart.canvas.getBoundingClientRect();
+
+  if (!TOOLTIP_PINNED && tooltip.opacity === 0) {
     el.style.opacity = '0';
+    el.style.pointerEvents = 'none';
     return;
   }
 
-  const dp  = tooltip.dataPoints && tooltip.dataPoints[0];
-  const raw = dp ? dp.raw : null;
-  const title = raw?.title || '';
-  const descHtml = linkify(raw?.description || '');
-  const img = raw ? (FIRST_IMG.get(raw.key) || '') : '';
+  let raw, anchorLeft, anchorTop;
+  if (TOOLTIP_PINNED && PINNED_DATA && PINNED_POS) {
+    raw = PINNED_DATA;
+    anchorLeft = PINNED_POS.left;
+    anchorTop  = PINNED_POS.top;
+  } else {
+    const dp = tooltip.dataPoints && tooltip.dataPoints[0];
+    raw = dp ? dp.raw : null;
+    anchorLeft = rect.left + tooltip.caretX;
+    anchorTop  = rect.top  + tooltip.caretY;
+    LAST_TOOLTIP_POS = { left: anchorLeft, top: anchorTop };
+  }
+
+  if (!raw) { el.style.opacity = '0'; el.style.pointerEvents = 'none'; return; }
+
+  const title = raw.title || '';
+  const descHtml = linkify(raw.description || '');
+  const img = FIRST_IMG.get(raw.key) || '';
 
   el.innerHTML = `
+    <button class="ct-close" aria-label="Close tooltip">&times;</button>
     <div class="ct-head">${escapeHTML(title)}</div>
     <div class="ct-body">
-      ${img ? `<img src="${img}" alt="${escapeHTML(title)}">` : `<div></div>`}
+      ${img ? `<img class="ct-img" src="${img}" alt="${escapeHTML(title)}">` : `<div></div>`}
       <div class="ct-text">${descHtml || '<em>No description</em>'}</div>
     </div>
   `;
 
-  // Position using viewport coords (fixed positioning)
-  const rect = chart.canvas.getBoundingClientRect();
-  const anchorX = rect.left + tooltip.caretX;  // viewport X
-  const anchorY = rect.top  + tooltip.caretY;  // viewport Y
+  // interactions when pinned
+  const closeBtn = el.querySelector('.ct-close');
+  if (closeBtn) closeBtn.onclick = (ev) => { ev.preventDefault(); unpinTooltip(); };
 
-  // Measure tooltip to keep it on-screen
-  el.style.opacity = '1';
+  const imgEl = el.querySelector('.ct-img');
+  if (imgEl) {
+    imgEl.onclick = (ev) => { ev.stopPropagation(); openGalleryForKey(raw.key); };
+  }
+
+  // Position within viewport (fixed)
   const tw = el.offsetWidth;
   const th = el.offsetHeight;
   const pad = 10;
-
-  // Prefer above; flip below if not enough room
-  let top = anchorY - th - pad;
-  if (top < 4) top = anchorY + pad;
-
-  // Center horizontally; clamp to viewport
-  let left = anchorX - tw / 2;
   const vw = window.innerWidth;
   const vh = window.innerHeight;
+
+  let top = anchorTop - th - pad;
+  if (top < 4) top = anchorTop + pad;
+
+  let left = anchorLeft - tw / 2;
   if (left < 4) left = 4;
   if (left + tw > vw - 4) left = vw - tw - 4;
   if (top + th > vh - 4) top = Math.max(4, vh - th - 4);
 
   el.style.left = `${Math.round(left)}px`;
   el.style.top  = `${Math.round(top)}px`;
+  el.style.opacity = '1';
+  el.style.pointerEvents = TOOLTIP_PINNED ? 'auto' : 'none';
 }
-
 
 // ===== Tabs helpers =====
 function activateTab(tabBtn, viewEl) {
@@ -434,7 +411,7 @@ function renderCalendar(events) {
     const mm = parseInt(month, 10) - 1;
     let yy = parseInt(year, 10);
 
-    // 2-digit years supported: 00–69 => 2000+, 70–99 => 1900+
+    // 2-digit years: 00–69 => 2000+, 70–99 => 1900+
     if (!Number.isFinite(yy)) yy = currentYear;
     else if (year && year.length === 2) yy = yy <= 69 ? 2000 + yy : 1900 + yy;
 
@@ -478,7 +455,11 @@ function renderCalendar(events) {
   });
 }
 
-// ===== Achievements (auto-gallery by title or explicit images) =====
+// ===== Achievements (list + gallery) =====
+function achKey(a) {
+  return `${slugify(a.title || '')}_${(a.date || '').trim()}`;
+}
+
 function renderAchievements(items, assetsBase) {
   const container = $('#achievementsList');
   if (!container) return;
@@ -501,6 +482,11 @@ function renderAchievements(items, assetsBase) {
     const card = document.createElement('article');
     card.classList.add('ach-card');
 
+    const key = achKey(a);
+    card.id = 'ach-' + key;
+    card.dataset.key = key;
+    MAP_ACH.set(key, a);
+
     const header = document.createElement('div');
     header.classList.add('ach-header');
 
@@ -520,15 +506,17 @@ function renderAchievements(items, assetsBase) {
     if (a.description) {
       const desc = document.createElement('p');
       desc.classList.add('ach-desc');
-      desc.innerHTML = linkify(a.description); // was: textContent
+      desc.innerHTML = linkify(a.description);
       card.appendChild(desc);
     }
+
     const gallery = document.createElement('div');
     gallery.classList.add('gallery');
     card.appendChild(gallery);
 
     if (Array.isArray(a.images) && a.images.length) {
       const resolved = a.images.map(src => resolveImageSrc(src, assetsBase));
+      if (resolved.length) FIRST_IMG.set(key, resolved[0]);
       buildGallery(gallery, resolved, a.title);
     } else {
       const folder = slugify(a.title || `achievement-${idx + 1}`);
@@ -541,10 +529,9 @@ function renderAchievements(items, assetsBase) {
       placeholder.style.fontSize = '14px';
       gallery.appendChild(placeholder);
 
-      // Try JSON manifest first (built at startup)
+      // JSON manifest first
       fetch(manifestUrl, { cache: 'no-store' })
         .then(res => {
-          console.debug('manifest status', manifestUrl, res.status);
           if (!res.ok) throw new Error(`manifest ${res.status}`);
           return res.json();
         })
@@ -564,7 +551,7 @@ function renderAchievements(items, assetsBase) {
             gallery.appendChild(empty);
             return;
           }
-          if (images.length) FIRST_IMG.set(achKey(a), images[0]);
+          FIRST_IMG.set(key, images[0]);
           buildGallery(gallery, images, a.title);
         })
         .catch(err => {
@@ -617,7 +604,30 @@ async function listImagesInDir(dirUrl) {
 }
 function isImageFile(name) { return /\.(png|jpe?g|webp|gif|bmp|svg)$/i.test(name); }
 
-// ===== Chart (XY or fallback) =====
+// ===== Chart (Year vs Weight 1–5) =====
+function prefetchFirstImages(items, assetsBase) {
+  const tasks = items.map(a => {
+    const key = achKey(a);
+    if (FIRST_IMG.has(key)) return Promise.resolve();
+    return fetchFirstImage(a, assetsBase).then(u => { if (u) FIRST_IMG.set(key, u); });
+  });
+  return Promise.allSettled(tasks);
+}
+function fetchFirstImage(a, assetsBase) {
+  if (Array.isArray(a.images) && a.images.length) {
+    return Promise.resolve(resolveImageSrc(a.images[0], assetsBase));
+  }
+  const folder = slugify(a.title || 'achievement');
+  const manifestUrl = `/_gallery/${folder}.json?t=${Date.now()}`;
+  const dirUrl = ensureTrailingSlash(assetsBase) + folder + '/';
+
+  return fetch(manifestUrl, { cache: 'no-store' })
+    .then(r => (r.ok ? r.json() : Promise.reject()))
+    .then(j => (Array.isArray(j.images) && j.images.length ? j.images[0] : null))
+    .catch(() => listImagesInDir(dirUrl).then(arr => (arr[0] || null)))
+    .catch(() => null);
+}
+
 function renderAchievementsChart(items) {
   const canvas = document.getElementById('achievementsChart');
   const note   = document.getElementById('chartNote');
@@ -625,37 +635,65 @@ function renderAchievementsChart(items) {
 
   if (achievementsChart) { achievementsChart.destroy(); achievementsChart = null; }
 
-  // Preload first images for tooltip, then draw
   prefetchFirstImages(items, ASSETS_BASE).finally(() => {
     const points = items.map(a => {
       const d = parseDDMMYYYY(a.date);
       const year = d ? d.getFullYear() : null;
       let y = Number(a.weight);
-      if (!Number.isFinite(y) && a.xy && isFinite(+a.xy.y)) y = Number(a.xy.y); // legacy
+      if (!Number.isFinite(y) && a.xy && isFinite(+a.xy.y)) y = Number(a.xy.y); // legacy support
       if (!Number.isFinite(y) || !year) return null;
-      y = Math.max(1, Math.min(5, y));
-      return {
-        x: year, y,
-        title: a.title || '',
-        description: a.description || '',
-        key: achKey(a)
-      };
+      y = Math.max(1, Math.min(5, y)); // clamp 1–5
+      return { x: year, y, title: a.title || '', description: a.description || '', key: achKey(a) };
     }).filter(Boolean);
 
     const opts = {
-      responsive: true, maintainAspectRatio: false, animation: false,
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: false,
       devicePixelRatio: Math.min(window.devicePixelRatio || 1, 2),
       interaction: { mode: 'nearest', intersect: true },
       plugins: {
         legend: { display: false },
-        tooltip: {
-          enabled: false,          // we render our own
-          external: externalTooltipHandler
-        }
+        tooltip: { enabled: false, external: externalTooltipHandler }
       },
       scales: {
         x: { type: 'linear', title: { display: true, text: 'Year' }, ticks: { stepSize: 1, callback: v => Number(v).toFixed(0) } },
         y: { title: { display: true, text: 'Weight (1–5)' }, min: 0.5, max: 5.5, ticks: { stepSize: 1 } }
+      },
+      // Cursor + click behavior
+      onHover: (evt, activeEls, chart) => {
+        chart.canvas.style.cursor = (activeEls && activeEls.length) ? 'pointer' : 'default';
+      },
+      onClick: (evt, activeEls, chart) => {
+        if (!activeEls || !activeEls.length) { unpinTooltip(); return; }
+        const { datasetIndex, index } = activeEls[0];
+        const raw = chart.data.datasets[datasetIndex].data[index];
+
+        // Pin at last hover position (fallback to element coords)
+        TOOLTIP_PINNED = true;
+        PINNED_DATA = raw;
+
+        const rect = chart.canvas.getBoundingClientRect();
+        if (!LAST_TOOLTIP_POS) {
+          const el = activeEls[0].element;
+          PINNED_POS = { left: rect.left + el.x, top: rect.top + el.y };
+        } else {
+          PINNED_POS = { ...LAST_TOOLTIP_POS };
+        }
+
+        // Show the pinned tooltip immediately
+        externalTooltipHandler({
+          chart,
+          tooltip: {
+            opacity: 1,
+            caretX: PINNED_POS.left - rect.left,
+            caretY: PINNED_POS.top - rect.top,
+            dataPoints: [{ raw }]
+          }
+        });
+
+        // Scroll to card & flash it
+        scrollToCard(raw.key);
       }
     };
 
@@ -666,10 +704,19 @@ function renderAchievementsChart(items) {
 
       achievementsChart = new Chart(canvas, {
         type: 'scatter',
-        data: { datasets: [{ label: 'Achievements', data: points, pointRadius: 5 }] },
+        data: {
+          datasets: [{
+            label: 'Achievements',
+            data: points,
+            pointRadius: 7,
+            pointHoverRadius: 10,
+            hitRadius: 12,
+            borderWidth: 2
+          }]
+        },
         options: opts
       });
-      if (note) note.textContent = 'Scatter: Year vs Weight (1–5). Hover points for image + description.';
+      if (note) note.textContent = 'Scatter: Year vs Weight (1–5). Hover or click a point.';
     } else {
       const byYear = {};
       items.forEach(a => { const d = parseDDMMYYYY(a.date); if (d) byYear[d.getFullYear()] = (byYear[d.getFullYear()] || 0) + 1; });
@@ -686,6 +733,45 @@ function renderAchievementsChart(items) {
   });
 }
 
+// Pin/unpin + navigation helpers
+function unpinTooltip() {
+  TOOLTIP_PINNED = false;
+  PINNED_DATA = null;
+  PINNED_POS = null;
+  const el = document.getElementById('chart-tooltip');
+  if (el) { el.style.opacity = '0'; el.style.pointerEvents = 'none'; }
+}
+function scrollToCard(key) {
+  const el = document.getElementById('ach-' + key);
+  if (!el) return;
+  el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  el.classList.add('flash');
+  setTimeout(() => el.classList.remove('flash'), 1200);
+}
+async function getAllImagesForKey(key) {
+  const a = MAP_ACH.get(key);
+  if (!a) return [];
+  if (Array.isArray(a.images) && a.images.length) {
+    return a.images.map(src => resolveImageSrc(src, ASSETS_BASE));
+  }
+  const folder = slugify(a.title || 'achievement');
+  const manifestUrl = `/_gallery/${folder}.json?t=${Date.now()}`;
+  const dirUrl = ensureTrailingSlash(ASSETS_BASE) + folder + '/';
+  try {
+    const r = await fetch(manifestUrl, { cache: 'no-store' });
+    if (r.ok) {
+      const j = await r.json();
+      if (Array.isArray(j.images) && j.images.length) return j.images;
+    }
+  } catch {}
+  try {
+    return await listImagesInDir(dirUrl);
+  } catch { return []; }
+}
+async function openGalleryForKey(key) {
+  const imgs = await getAllImagesForKey(key);
+  if (imgs.length) openLightbox(imgs, 0);
+}
 
 // ===== Lightbox =====
 function openLightbox(images, index = 0) {
@@ -728,11 +814,11 @@ function linkify(text) {
   s = s.replace(/\bhttps?:\/\/[^\s<)]+/gi, (m) =>
     `<a href="${m}" target="_blank" rel="noopener noreferrer">${m}</a>`);
 
-  // www.*  (captures leading space or "(" so we can keep it)
+  // www.*
   s = s.replace(/(^|[\s(])(www\.[^\s<)]+)/gi, (_full, lead, host) =>
     `${lead}<a href="https://${host}" target="_blank" rel="noopener noreferrer">${host}</a>`);
 
-  // line breaks (optional)
+  // line breaks
   s = s.replace(/\n/g, '<br>');
   return s;
 }

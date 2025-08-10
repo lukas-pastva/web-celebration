@@ -164,8 +164,8 @@ i.fa-chart-scatter::before { content: "\f7ee"; }
 }
 /* Chart tooltip */
 .chart-tooltip {
-  position: absolute;
-  transform: translate(-50%, -100%); /* center over point, above it */
+  position: fixed;          /* <-- was absolute */
+  transform: none;          /* <-- no translate; we place it precisely */
   pointer-events: none;
   background: var(--card);
   color: var(--text);
@@ -174,7 +174,7 @@ i.fa-chart-scatter::before { content: "\f7ee"; }
   box-shadow: var(--shadow);
   padding: 10px;
   max-width: 320px;
-  z-index: 5;
+  z-index: 9999;            /* above everything */
 }
 .chart-tooltip .ct-head { font-weight: 800; margin-bottom: 6px; }
 .chart-tooltip .ct-body { display: grid; grid-template-columns: 120px 1fr; gap: 10px; align-items: start; }

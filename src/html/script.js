@@ -345,18 +345,23 @@ function adaptUI(ctx) {
 }
 function externalTooltipHandler(context) {
   const { chart, tooltip } = context;
-  let el = chart.canvas.parentNode.querySelector('.chart-tooltip');
 
+  // One global tooltip element
+  let el = document.getElementById('chart-tooltip');
   if (!el) {
     el = document.createElement('div');
+    el.id = 'chart-tooltip';
     el.className = 'chart-tooltip';
     el.style.opacity = '0';
-    chart.canvas.parentNode.appendChild(el);
+    document.body.appendChild(el);
   }
 
-  if (tooltip.opacity === 0) { el.style.opacity = '0'; return; }
+  if (tooltip.opacity === 0) {
+    el.style.opacity = '0';
+    return;
+  }
 
-  const dp = tooltip.dataPoints && tooltip.dataPoints[0];
+  const dp  = tooltip.dataPoints && tooltip.dataPoints[0];
   const raw = dp ? dp.raw : null;
   const title = raw?.title || '';
   const descHtml = linkify(raw?.description || '');
@@ -366,21 +371,37 @@ function externalTooltipHandler(context) {
     <div class="ct-head">${escapeHTML(title)}</div>
     <div class="ct-body">
       ${img ? `<img src="${img}" alt="${escapeHTML(title)}">` : `<div></div>`}
-      <div class="ct-text">
-        ${descHtml || '<em>No description</em>'}
-      </div>
+      <div class="ct-text">${descHtml || '<em>No description</em>'}</div>
     </div>
   `;
 
-  const { canvas } = chart;
-  const rect = canvas.getBoundingClientRect();
-  const left = rect.left + window.pageXOffset + tooltip.caretX;
-  const top  = rect.top  + window.pageYOffset + tooltip.caretY - 12;
+  // Position using viewport coords (fixed positioning)
+  const rect = chart.canvas.getBoundingClientRect();
+  const anchorX = rect.left + tooltip.caretX;  // viewport X
+  const anchorY = rect.top  + tooltip.caretY;  // viewport Y
 
+  // Measure tooltip to keep it on-screen
   el.style.opacity = '1';
-  el.style.left = `${left}px`;
-  el.style.top  = `${top}px`;
+  const tw = el.offsetWidth;
+  const th = el.offsetHeight;
+  const pad = 10;
+
+  // Prefer above; flip below if not enough room
+  let top = anchorY - th - pad;
+  if (top < 4) top = anchorY + pad;
+
+  // Center horizontally; clamp to viewport
+  let left = anchorX - tw / 2;
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  if (left < 4) left = 4;
+  if (left + tw > vw - 4) left = vw - tw - 4;
+  if (top + th > vh - 4) top = Math.max(4, vh - th - 4);
+
+  el.style.left = `${Math.round(left)}px`;
+  el.style.top  = `${Math.round(top)}px`;
 }
+
 
 // ===== Tabs helpers =====
 function activateTab(tabBtn, viewEl) {

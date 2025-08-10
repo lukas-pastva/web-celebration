@@ -53,7 +53,12 @@ document.addEventListener('DOMContentLoaded', () => {
   // Theme (guarded)
   setTheme(preferredTheme());
   on($('#themeToggle'), 'click', () => setTheme(currentTheme() === 'light' ? 'dark' : 'light'));
-
+  on(document, 'keydown', (e) => {
+    if (e.key === 'Escape' || e.key === 'Esc') {
+      const lb = $('#lightbox');
+      if (lb && !lb.hidden) closeLightbox();
+    }
+  });
   // Tabs & views (guarded)
   const tabsContainer     = $('.tabs');
   const tabCelebrations   = $('#tab-celebrations');
@@ -84,6 +89,18 @@ document.addEventListener('DOMContentLoaded', () => {
     .then(r => r.text())
     .then(yamlText => {
       const data = jsyaml.load(yamlText) || {};
+      const siteTitle = (typeof data.site_title === 'string' && data.site_title.trim())
+        ? data.site_title.trim()
+        : 'Web-Celebration';
+      document.title = siteTitle;
+      const bn = $('#brandName');
+      if (bn) bn.textContent = siteTitle;
+
+      const intro = (typeof data.intro === 'string') ? data.intro : '';
+      const introEl = $('#introText');
+      if (introEl && intro.trim()) {
+        introEl.innerHTML = linkify(intro);
+      }
       const celebrations = Array.isArray(data.celebrations) ? data.celebrations : [];
       const achievements = Array.isArray(data.achievements) ? data.achievements : [];
 
@@ -266,10 +283,9 @@ function renderAchievements(items, assetsBase) {
     if (a.description) {
       const desc = document.createElement('p');
       desc.classList.add('ach-desc');
-      desc.textContent = a.description;
+      desc.innerHTML = linkify(a.description); // was: textContent
       card.appendChild(desc);
     }
-
     const gallery = document.createElement('div');
     gallery.classList.add('gallery');
     card.appendChild(gallery);
@@ -439,6 +455,28 @@ function navLightbox(delta) {
 function updateLightbox() {
   const img = $('#lightboxImg');
   if (img) img.src = lightboxState.images[lightboxState.index];
+}
+
+// ===== Linkify =====
+function escapeHTML(str) {
+  return String(str)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+function linkify(text) {
+  if (!text) return '';
+  let s = escapeHTML(text);
+
+  // http/https
+  s = s.replace(/\bhttps?:\/\/[^\s<)]+/gi, (m) =>
+    `<a href="${m}" target="_blank" rel="noopener noreferrer">${m}</a>`);
+
+  // www.*  (captures leading space or "(" so we can keep it)
+  s = s.replace(/(^|[\s(])(www\.[^\s<)]+)/gi, (_full, lead, host) =>
+    `${lead}<a href="https://${host}" target="_blank" rel="noopener noreferrer">${host}</a>`);
+
+  // line breaks (optional)
+  s = s.replace(/\n/g, '<br>');
+  return s;
 }
 
 // ===== Utils =====

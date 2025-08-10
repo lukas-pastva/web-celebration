@@ -28,8 +28,7 @@ body { font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
 .topbar { display: flex; align-items: center; justify-content: space-between; gap: 1rem;
           padding: 0.8rem 1rem; background: var(--card); box-shadow: var(--shadow);
           position: sticky; top: 0; z-index: 9; }
-.brand { display: flex; align-items: center; gap: 0.6rem; font-weight: 700; }
-.brand i { color: var(--accent); }
+/* brand removed */
 .controls { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; }
 
 /* Tabs */
@@ -39,11 +38,24 @@ body { font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
 .tab.active { color: var(--text); background: var(--bg); box-shadow: inset 0 0 0 2px var(--accent); }
 .tab i { margin-right: 0.4rem; color: var(--accent); }
 
-/* Theme toggle button */
-.icon-btn { border: 0; background: var(--bg); color: var(--text); cursor: pointer;
-            width: 40px; height: 40px; border-radius: 10px; display: grid; place-items: center;
-            box-shadow: inset 0 0 0 2px var(--accent); }
-.icon-btn i { font-size: 16px; }
+/* Floating theme toggle */
+.fab-theme {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  border: 0;
+  background: var(--card);
+  color: var(--text);
+  box-shadow: var(--shadow);
+  z-index: 10000;
+  cursor: pointer;
+}
+.fab-theme i { font-size: 18px; }
 
 /* Containers / Views */
 .container { width: min(1100px, 92%); margin: 18px auto 30px; }
@@ -81,9 +93,9 @@ h1 { margin: 6px 0 14px; }
 
 /* Achievements */
 .chart-card { background: var(--card); padding: 16px; border-radius: 12px; box-shadow: var(--shadow); margin-bottom: 18px; }
-.chart-card h2 { display: flex; align-items: center; gap: 8px; font-size: 18px; margin-bottom: 10px; }
+/* chart header removed */
 
-/* fixed-height canvas wrapper to avoid resize loops */
+/* fixed-height canvas wrapper */
 .chart-wrap {
   position: relative;
   height: 280px;
@@ -106,6 +118,11 @@ h1 { margin: 6px 0 14px; }
 .ach-header h3 { font-size: 20px; font-weight: 800; }
 .ach-meta { color: var(--muted); font-size: 14px; display: flex; align-items: center; gap: 6px; }
 .ach-desc { margin-top: 8px; }
+
+/* Weight stars */
+.stars { display: inline-flex; gap: 4px; align-items: center; margin-top: 6px; }
+.stars i { font-size: 16px; color: var(--muted); }
+.stars i.fill { color: var(--accent); }
 
 .gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
            gap: 10px; margin-top: 12px; }
@@ -154,7 +171,7 @@ i.fa-chart-scatter::before { content: "\f7ee"; }
   overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0;
 }
 
-/* Global, clickable chart tooltip fixed to viewport (never clipped) */
+/* Global, clickable chart tooltip (fixed) */
 #chart-tooltip.chart-tooltip {
   position: fixed;
   transform: none;

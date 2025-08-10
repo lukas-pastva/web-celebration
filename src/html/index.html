@@ -22,12 +22,7 @@
 </head>
 <body>
   <header class="topbar">
-    <!-- header brand -->
-    <div class="brand">
-      <i class="fa-solid fa-calendar-star"></i>
-      <span id="brandName">Web-Celebration</span>
-    </div>
-
+    <!-- brand removed per request -->
     <div class="controls">
       <div class="tabs" role="tablist" aria-label="Views">
         <button id="tab-celebrations" class="tab active" role="tab" aria-selected="true" aria-controls="view-celebrations">
@@ -37,11 +32,6 @@
           <i class="fa-solid fa-trophy"></i> Achievements
         </button>
       </div>
-
-      <!-- theme toggle (sun/moon) -->
-      <button id="themeToggle" class="icon-btn" aria-label="Switch to dark mode" title="Toggle theme">
-        <i class="fa-solid fa-moon"></i>
-      </button>
     </div>
   </header>
 
@@ -54,22 +44,21 @@
 
     <!-- Achievements -->
     <section id="view-achievements" class="view" aria-labelledby="tab-achievements">
-      <!-- Achievements header -->
+      <!-- Intro only (title removed per request) -->
       <div class="achievements-header">
-        <h1>Life Achievements</h1>
         <p id="introText" class="subtitle">
           A top-down list of milestones with image galleries and an XY chart.
         </p>
       </div>
 
-      <!-- Type filter (appears only if >1 type or untagged exist) -->
+      <!-- Type filter -->
       <div id="typeFilter" class="type-filter" hidden>
         <i class="fa-solid fa-filter"></i>
         <div id="typeChips" class="chip-wrap" role="group" aria-label="Filter achievements by type"></div>
       </div>
 
       <div class="chart-card">
-        <h2><i class="fa-solid fa-chart-scatter"></i> Achievements — XY Chart</h2>
+        <!-- chart header removed per request -->
         <div class="chart-wrap">
           <canvas id="achievementsChart"></canvas>
         </div>
@@ -79,6 +68,11 @@
       <div id="achievementsList" class="achievements-list"></div>
     </section>
   </main>
+
+  <!-- Floating theme toggle -->
+  <button id="themeToggle" class="fab-theme" aria-label="Toggle theme" title="Toggle theme">
+    <i class="fa-solid fa-moon"></i>
+  </button>
 
   <!-- Lightbox -->
   <div id="lightbox" class="lightbox" aria-modal="true" role="dialog" hidden>
@@ -94,7 +88,6 @@
     </button>
   </div>
 
-  <!-- bump the query to bust Cloudflare caches -->
-  <script src="script.js?v=2025-08-10-02"></script>
+  <script src="script.js?v=2025-08-10-03"></script>
 </body>
 </html>

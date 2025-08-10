@@ -219,12 +219,11 @@ document.addEventListener('DOMContentLoaded', () => {
         typeof data.assets_base_path === 'string' ? data.assets_base_path : '/data/'
       );
 
-      // Site title + intro
+      // Site title still applied to <title> (brand text removed from header)
       const siteTitle = (typeof data.site_title === 'string' && data.site_title.trim())
         ? data.site_title.trim()
         : 'Web-Celebration';
       document.title = siteTitle;
-      const bn = $('#brandName'); if (bn) bn.textContent = siteTitle;
 
       const intro = (typeof data.intro === 'string') ? data.intro : '';
       const introEl = $('#introText'); if (introEl && intro.trim()) introEl.innerHTML = linkify(intro);
@@ -238,8 +237,8 @@ document.addEventListener('DOMContentLoaded', () => {
       ASSETS_BASE = assetsBase;
 
       if (haveAchievements) {
-        setupTypeChips(ALL_ACH); // builds chips & selection
-        renderFiltered();        // renders list + chart
+        setupTypeChips(ALL_ACH);
+        renderFiltered();
       }
 
       adaptUI({
@@ -459,6 +458,22 @@ function renderCalendar(events) {
 function achKey(a) {
   return `${slugify(a.title || '')}_${(a.date || '').trim()}`;
 }
+function clampWeight(v) {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return null;
+  return Math.max(1, Math.min(5, Math.round(n)));
+}
+function starsHTML(weight) {
+  const w = clampWeight(weight) || 0;
+  let html = '<div class="stars" aria-label="Weight: ' + w + ' out of 5">';
+  for (let i = 1; i <= 5; i++) {
+    html += i <= w
+      ? '<i class="fa-solid fa-star fill" aria-hidden="true"></i>'
+      : '<i class="fa-regular fa-star" aria-hidden="true"></i>';
+  }
+  html += '</div>';
+  return html;
+}
 
 function renderAchievements(items, assetsBase) {
   const container = $('#achievementsList');
@@ -501,6 +516,15 @@ function renderAchievements(items, assetsBase) {
       <span>${a.parsedDate ? a.parsedDate.toLocaleDateString() : (a.date || '')}</span>
     `;
     header.appendChild(meta);
+
+    // Stars for weight
+    const w = clampWeight(a.weight ?? (a.xy && a.xy.y));
+    if (w) {
+      const stars = document.createElement('div');
+      stars.innerHTML = starsHTML(w);
+      header.appendChild(stars.firstChild);
+    }
+
     card.appendChild(header);
 
     if (a.description) {
@@ -642,7 +666,7 @@ function renderAchievementsChart(items) {
       let y = Number(a.weight);
       if (!Number.isFinite(y) && a.xy && isFinite(+a.xy.y)) y = Number(a.xy.y); // legacy support
       if (!Number.isFinite(y) || !year) return null;
-      y = Math.max(1, Math.min(5, y)); // clamp 1–5
+      y = Math.max(1, Math.min(5, Math.round(y))); // clamp 1–5 integers for star rating
       return { x: year, y, title: a.title || '', description: a.description || '', key: achKey(a) };
     }).filter(Boolean);
 
@@ -660,7 +684,6 @@ function renderAchievementsChart(items) {
         x: { type: 'linear', title: { display: true, text: 'Year' }, ticks: { stepSize: 1, callback: v => Number(v).toFixed(0) } },
         y: { title: { display: true, text: 'Weight (1–5)' }, min: 0.5, max: 5.5, ticks: { stepSize: 1 } }
       },
-      // Cursor + click behavior
       onHover: (evt, activeEls, chart) => {
         chart.canvas.style.cursor = (activeEls && activeEls.length) ? 'pointer' : 'default';
       },
@@ -708,9 +731,11 @@ function renderAchievementsChart(items) {
           datasets: [{
             label: 'Achievements',
             data: points,
-            pointRadius: 7,
-            pointHoverRadius: 10,
-            hitRadius: 12,
+            pointStyle: 'star',      // star-shaped markers
+            rotation: 0,
+            pointRadius: 9,          // bigger points
+            pointHoverRadius: 12,
+            hitRadius: 14,
             borderWidth: 2
           }]
         },

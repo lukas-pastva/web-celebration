@@ -10,29 +10,29 @@ const eventIcons = {
 // ===== Global state (achievements + filtering) =====
 let ALL_ACH = [];
 let ASSETS_BASE = '';
-let CHIPS_TYPES = [];                 // discovered types
+let CHIPS_TYPES = [];
 let HAS_UNTAGGED = false;
 let SELECTED_TYPES = new Set();
 const FILTER_KEY = 'wc_type_filter_v2';
-let FIRST_IMG = new Map();            // key -> first image URL
-let MAP_ACH = new Map();              // key -> achievement object
+let FIRST_IMG = new Map();
+let MAP_ACH = new Map();
 
 // ===== Chart tooltip pinning state =====
 let TOOLTIP_PINNED = false;
-let PINNED_DATA = null;               // raw data object of the pinned point
-let PINNED_POS = null;                // {left, top} viewport coords of anchor
-let LAST_TOOLTIP_POS = null;          // remember last hover position
+let PINNED_DATA = null;
+let PINNED_POS = null;
+let LAST_TOOLTIP_POS = null;
 
 // ===== Lightbox state =====
 let lightboxState = { images: [], index: 0 };
-let achievementsChart = null;         // prevent duplicate charts
+let achievementsChart = null;
 
 // ===== Theme =====
 const THEME_KEY = 'wc_theme';
 
 // ===== Safe helpers =====
 const $ = (sel) => document.querySelector(sel);
-function on(el, ev, fn) { if (el) el.addEventListener(ev, fn); } // null-safe
+function on(el, ev, fn) { if (el) el.addEventListener(ev, fn); }
 
 // ===== Theme helpers =====
 function preferredTheme() {
@@ -47,22 +47,16 @@ function setTheme(theme) {
   updateThemeToggleIcon(theme);
   if (achievementsChart) achievementsChart.resize();
 }
-function currentTheme() {
-  return document.documentElement.getAttribute('data-theme') || 'light';
-}
+function currentTheme() { return document.documentElement.getAttribute('data-theme') || 'light'; }
 function updateThemeToggleIcon(theme) {
   const icon = $('#themeToggle i');
   const btn  = $('#themeToggle');
   if (!icon || !btn) return;
   icon.classList.remove('fa-sun', 'fa-moon');
   if (theme === 'dark') {
-    icon.classList.add('fa-sun');
-    btn.setAttribute('aria-label', 'Switch to light mode');
-    btn.title = 'Switch to light mode';
+    icon.classList.add('fa-sun');  btn.setAttribute('aria-label', 'Switch to light mode');  btn.title = 'Switch to light mode';
   } else {
-    icon.classList.add('fa-moon');
-    btn.setAttribute('aria-label', 'Switch to dark mode');
-    btn.title = 'Switch to dark mode';
+    icon.classList.add('fa-moon'); btn.setAttribute('aria-label', 'Switch to dark mode');   btn.title = 'Switch to dark mode';
   }
 }
 
@@ -73,12 +67,9 @@ function normTypes(val) {
   else if (typeof val === 'string') arr = val.split(/[,\|]/);
   return arr.map(s => s.trim().toLowerCase()).filter(Boolean);
 }
-function titlecase(s) {
-  return String(s).replace(/\b([a-z])/g, m => m.toUpperCase()).replace(/[-_]/g, ' ');
-}
+function titlecase(s) { return String(s).replace(/\b([a-z])/g, m => m.toUpperCase()).replace(/[-_]/g, ' '); }
 function restoreChipSelection() {
-  try {
-    const raw = localStorage.getItem(FILTER_KEY);
+  try { const raw = localStorage.getItem(FILTER_KEY);
     if (!raw) return new Set(['__all']);
     const arr = JSON.parse(raw);
     if (Array.isArray(arr) && arr.length) return new Set(arr);
@@ -86,11 +77,8 @@ function restoreChipSelection() {
   return new Set(['__all']);
 }
 function persistChipSelection() {
-  if (SELECTED_TYPES.has('__all')) {
-    localStorage.setItem(FILTER_KEY, JSON.stringify(['__all']));
-  } else {
-    localStorage.setItem(FILTER_KEY, JSON.stringify(Array.from(SELECTED_TYPES)));
-  }
+  if (SELECTED_TYPES.has('__all')) localStorage.setItem(FILTER_KEY, JSON.stringify(['__all']));
+  else localStorage.setItem(FILTER_KEY, JSON.stringify(Array.from(SELECTED_TYPES)));
 }
 function makeChip(value, label) {
   const btn = document.createElement('button');
@@ -99,28 +87,23 @@ function makeChip(value, label) {
   btn.setAttribute('data-value', value);
   btn.setAttribute('aria-pressed', SELECTED_TYPES.has(value) ? 'true' : 'false');
   btn.textContent = label;
-
   btn.addEventListener('click', () => {
-    if (value === '__all') {
-      SELECTED_TYPES = new Set(['__all']);
-    } else {
+    if (value === '__all') SELECTED_TYPES = new Set(['__all']);
+    else {
       SELECTED_TYPES.delete('__all');
-      if (SELECTED_TYPES.has(value)) SELECTED_TYPES.delete(value);
-      else SELECTED_TYPES.add(value);
+      if (SELECTED_TYPES.has(value)) SELECTED_TYPES.delete(value); else SELECTED_TYPES.add(value);
       if (SELECTED_TYPES.size === 0) SELECTED_TYPES.add('__all');
     }
     persistChipSelection();
     updateChipPressedStates();
     renderFiltered();
   });
-
   return btn;
 }
 function updateChipPressedStates() {
   const chipsHost = document.getElementById('typeChips');
   if (!chipsHost) return;
-  const chips = chipsHost.querySelectorAll('.chip');
-  chips.forEach(chip => {
+  chipsHost.querySelectorAll('.chip').forEach(chip => {
     const v = chip.getAttribute('data-value');
     chip.setAttribute('aria-pressed', SELECTED_TYPES.has(v) ? 'true' : 'false');
   });
@@ -143,12 +126,10 @@ function setupTypeChips(items) {
   if (!shouldShow) { wrap.hidden = true; return; }
 
   SELECTED_TYPES = restoreChipSelection();
-
   chipsHost.innerHTML = '';
   chipsHost.appendChild(makeChip('__all', 'All'));
   CHIPS_TYPES.forEach(t => chipsHost.appendChild(makeChip(t, titlecase(t))));
   if (HAS_UNTAGGED) chipsHost.appendChild(makeChip('__untagged', 'Untagged'));
-
   updateChipPressedStates();
   wrap.hidden = false;
 }
@@ -206,7 +187,7 @@ document.addEventListener('DOMContentLoaded', () => {
   on($('#lightboxNext'),  'click', () => navLightbox(1));
   on($('#lightbox'), 'click', (e) => { if (e.target.id === 'lightbox') closeLightbox(); });
 
-  // Load data (cache-busted) & render
+  // Load data & render
   const bust = Date.now();
   fetch(`celebrations.yaml?t=${bust}`, { cache: 'no-store' })
     .then(r => r.text())
@@ -219,10 +200,8 @@ document.addEventListener('DOMContentLoaded', () => {
         typeof data.assets_base_path === 'string' ? data.assets_base_path : '/data/'
       );
 
-      // Site title still applied to <title> (brand text removed from header)
       const siteTitle = (typeof data.site_title === 'string' && data.site_title.trim())
-        ? data.site_title.trim()
-        : 'Web-Celebration';
+        ? data.site_title.trim() : 'Web-Celebration';
       document.title = siteTitle;
 
       const intro = (typeof data.intro === 'string') ? data.intro : '';
@@ -230,7 +209,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
       const haveCelebrations = celebrations.length > 0;
       const haveAchievements = achievements.length > 0;
-
       if (haveCelebrations) renderCalendar(celebrations);
 
       ALL_ACH = achievements;
@@ -250,7 +228,7 @@ document.addEventListener('DOMContentLoaded', () => {
     .catch(err => console.error('Error loading YAML:', err));
 });
 
-// ===== UI adaptation (all null-safe) =====
+// ===== UI adaptation =====
 function adaptUI(ctx) {
   const {
     haveCelebrations, haveAchievements,
@@ -299,11 +277,10 @@ function adaptUI(ctx) {
   }
 }
 
-// ===== Global, fixed tooltip handler (never clipped) =====
+// ===== Global, fixed tooltip handler =====
 function externalTooltipHandler(context) {
   const { chart, tooltip } = context;
 
-  // one tooltip element on <body>
   let el = document.getElementById('chart-tooltip');
   if (!el) {
     el = document.createElement('div');
@@ -349,14 +326,11 @@ function externalTooltipHandler(context) {
     </div>
   `;
 
-  // interactions when pinned
   const closeBtn = el.querySelector('.ct-close');
   if (closeBtn) closeBtn.onclick = (ev) => { ev.preventDefault(); unpinTooltip(); };
 
   const imgEl = el.querySelector('.ct-img');
-  if (imgEl) {
-    imgEl.onclick = (ev) => { ev.stopPropagation(); openGalleryForKey(raw.key); };
-  }
+  if (imgEl) { imgEl.onclick = (ev) => { ev.stopPropagation(); openGalleryForKey(raw.key); }; }
 
   // Position within viewport (fixed)
   const tw = el.offsetWidth;
@@ -410,7 +384,6 @@ function renderCalendar(events) {
     const mm = parseInt(month, 10) - 1;
     let yy = parseInt(year, 10);
 
-    // 2-digit years: 00–69 => 2000+, 70–99 => 1900+
     if (!Number.isFinite(yy)) yy = currentYear;
     else if (year && year.length === 2) yy = yy <= 69 ? 2000 + yy : 1900 + yy;
 
@@ -455,14 +428,8 @@ function renderCalendar(events) {
 }
 
 // ===== Achievements (list + gallery) =====
-function achKey(a) {
-  return `${slugify(a.title || '')}_${(a.date || '').trim()}`;
-}
-function clampWeight(v) {
-  const n = Number(v);
-  if (!Number.isFinite(n)) return null;
-  return Math.max(1, Math.min(5, Math.round(n)));
-}
+function achKey(a) { return `${slugify(a.title || '')}_${(a.date || '').trim()}`; }
+function clampWeight(v) { const n = Number(v); if (!Number.isFinite(n)) return null; return Math.max(1, Math.min(5, Math.round(n))); }
 function starsHTML(weight) {
   const w = clampWeight(weight) || 0;
   let html = '<div class="stars" aria-label="Weight: ' + w + ' out of 5">';
@@ -517,7 +484,6 @@ function renderAchievements(items, assetsBase) {
     `;
     header.appendChild(meta);
 
-    // Stars for weight
     const w = clampWeight(a.weight ?? (a.xy && a.xy.y));
     if (w) {
       const stars = document.createElement('div');
@@ -553,12 +519,8 @@ function renderAchievements(items, assetsBase) {
       placeholder.style.fontSize = '14px';
       gallery.appendChild(placeholder);
 
-      // JSON manifest first
       fetch(manifestUrl, { cache: 'no-store' })
-        .then(res => {
-          if (!res.ok) throw new Error(`manifest ${res.status}`);
-          return res.json();
-        })
+        .then(res => { if (!res.ok) throw new Error(`manifest ${res.status}`); return res.json(); })
         .then(json => Array.isArray(json.images) ? json.images : [])
         .catch(() => [])
         .then(async (images) => {
@@ -612,23 +574,21 @@ function buildGallery(container, imageUrls, title = 'Achievement') {
   });
 }
 
-// ===== Directory listing fetch & parse (requires Nginx autoindex on /data) =====
+// ===== Directory listing =====
 async function listImagesInDir(dirUrl) {
   const res = await fetch(dirUrl, { headers: { 'Accept': 'text/html' }, cache: 'no-store' });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const html = await res.text();
   const doc = new DOMParser().parseFromString(html, 'text/html');
   const anchors = Array.from(doc.querySelectorAll('a'));
-  const files = anchors
-    .map(a => a.getAttribute('href') || '')
+  const files = anchors.map(a => a.getAttribute('href') || '')
     .filter(h => h && !h.endsWith('/'))
     .filter(isImageFile);
-
   return files.map(h => new URL(h, dirUrl).toString());
 }
 function isImageFile(name) { return /\.(png|jpe?g|webp|gif|bmp|svg)$/i.test(name); }
 
-// ===== Chart (Year vs Weight 1–5) =====
+// ===== Chart (Month-resolution X; Weight 1–5 Y) =====
 function prefetchFirstImages(items, assetsBase) {
   const tasks = items.map(a => {
     const key = achKey(a);
@@ -644,7 +604,6 @@ function fetchFirstImage(a, assetsBase) {
   const folder = slugify(a.title || 'achievement');
   const manifestUrl = `/_gallery/${folder}.json?t=${Date.now()}`;
   const dirUrl = ensureTrailingSlash(assetsBase) + folder + '/';
-
   return fetch(manifestUrl, { cache: 'no-store' })
     .then(r => (r.ok ? r.json() : Promise.reject()))
     .then(j => (Array.isArray(j.images) && j.images.length ? j.images[0] : null))
@@ -652,22 +611,42 @@ function fetchFirstImage(a, assetsBase) {
     .catch(() => null);
 }
 
+// NEW: fractional-year helpers for month-level axis
+const MONTH_ABBR = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+function fractionalYear(d) {
+  const y = d.getFullYear();
+  const m = d.getMonth();        // 0..11
+  const days = new Date(y, m + 1, 0).getDate();
+  const day = d.getDate();
+  const frac = m / 12 + ((day - 1) / days) / 12;  // month + day fraction
+  return y + frac;
+}
+function labelFromFractionalYear(v) {
+  const y = Math.floor(v);
+  let rem = v - y;
+  if (rem < 0) rem = 0;
+  // avoid rounding up to 12
+  let idx = Math.floor(rem * 12 + 1e-6);
+  if (idx > 11) idx = 11;
+  return `${MONTH_ABBR[idx]} ${y}`;
+}
+
 function renderAchievementsChart(items) {
   const canvas = document.getElementById('achievementsChart');
   const note   = document.getElementById('chartNote');
   if (!canvas) return;
-
   if (achievementsChart) { achievementsChart.destroy(); achievementsChart = null; }
 
   prefetchFirstImages(items, ASSETS_BASE).finally(() => {
     const points = items.map(a => {
       const d = parseDDMMYYYY(a.date);
-      const year = d ? d.getFullYear() : null;
+      if (!d) return null;
+      const x = fractionalYear(d);           // <— month resolution
       let y = Number(a.weight);
-      if (!Number.isFinite(y) && a.xy && isFinite(+a.xy.y)) y = Number(a.xy.y); // legacy support
-      if (!Number.isFinite(y) || !year) return null;
-      y = Math.max(1, Math.min(5, Math.round(y))); // clamp 1–5 integers for star rating
-      return { x: year, y, title: a.title || '', description: a.description || '', key: achKey(a) };
+      if (!Number.isFinite(y) && a.xy && isFinite(+a.xy.y)) y = Number(a.xy.y); // legacy
+      if (!Number.isFinite(y)) return null;
+      y = Math.max(1, Math.min(5, Math.round(y)));
+      return { x, y, title: a.title || '', description: a.description || '', key: achKey(a) };
     }).filter(Boolean);
 
     const opts = {
@@ -681,7 +660,17 @@ function renderAchievementsChart(items) {
         tooltip: { enabled: false, external: externalTooltipHandler }
       },
       scales: {
-        x: { type: 'linear', title: { display: true, text: 'Year' }, ticks: { stepSize: 1, callback: v => Number(v).toFixed(0) } },
+        x: {
+          type: 'linear',
+          title: { display: true, text: 'Month' },
+          ticks: {
+            stepSize: 1/12,                    // monthly ticks
+            callback: (v) => labelFromFractionalYear(v),
+            autoSkip: true,
+            maxTicksLimit: 24                   // keep labels readable
+          },
+          grid: { drawTicks: true }
+        },
         y: { title: { display: true, text: 'Weight (1–5)' }, min: 0.5, max: 5.5, ticks: { stepSize: 1 } }
       },
       onHover: (evt, activeEls, chart) => {
@@ -692,7 +681,6 @@ function renderAchievementsChart(items) {
         const { datasetIndex, index } = activeEls[0];
         const raw = chart.data.datasets[datasetIndex].data[index];
 
-        // Pin at last hover position (fallback to element coords)
         TOOLTIP_PINNED = true;
         PINNED_DATA = raw;
 
@@ -704,7 +692,6 @@ function renderAchievementsChart(items) {
           PINNED_POS = { ...LAST_TOOLTIP_POS };
         }
 
-        // Show the pinned tooltip immediately
         externalTooltipHandler({
           chart,
           tooltip: {
@@ -715,15 +702,14 @@ function renderAchievementsChart(items) {
           }
         });
 
-        // Scroll to card & flash it
         scrollToCard(raw.key);
       }
     };
 
     if (points.length) {
       const xs = points.map(p => p.x);
-      opts.scales.x.min = Math.min(...xs) - 1;
-      opts.scales.x.max = Math.max(...xs) + 1;
+      opts.scales.x.min = Math.min(...xs) - 1/24;  // half-month padding
+      opts.scales.x.max = Math.max(...xs) + 1/24;
 
       achievementsChart = new Chart(canvas, {
         type: 'scatter',
@@ -731,29 +717,37 @@ function renderAchievementsChart(items) {
           datasets: [{
             label: 'Achievements',
             data: points,
-            pointStyle: 'star',      // star-shaped markers
-            rotation: 0,
-            pointRadius: 9,          // bigger points
-            pointHoverRadius: 12,
-            hitRadius: 14,
-            borderWidth: 2
+            pointStyle: 'star',
+            pointRadius: 10,                 // larger stars
+            pointHoverRadius: 13,
+            hitRadius: 16,
+            borderWidth: 2,
+            pointBackgroundColor: '#f1c40f', // yellow stars
+            pointBorderColor: '#f1c40f',
+            pointHoverBackgroundColor: '#f1c40f',
+            pointHoverBorderColor: '#f1c40f'
           }]
         },
         options: opts
       });
-      if (note) note.textContent = 'Scatter: Year vs Weight (1–5). Hover or click a point.';
+      if (note) note.textContent = 'Scatter: Month (by date) vs Weight (1–5). Hover or click a point.';
     } else {
-      const byYear = {};
-      items.forEach(a => { const d = parseDDMMYYYY(a.date); if (d) byYear[d.getFullYear()] = (byYear[d.getFullYear()] || 0) + 1; });
-      const labels = Object.keys(byYear).sort((a,b) => +a - +b);
-      const counts = labels.map(y => byYear[y]);
+      const byMonth = {};
+      items.forEach(a => {
+        const d = parseDDMMYYYY(a.date);
+        if (!d) return;
+        const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+        byMonth[key] = (byMonth[key] || 0) + 1;
+      });
+      const labels = Object.keys(byMonth).sort();
+      const counts = labels.map(k => byMonth[k]);
 
       achievementsChart = new Chart(canvas, {
         type: 'bar',
-        data: { labels, datasets: [{ label: 'Achievements per Year', data: counts }] },
+        data: { labels, datasets: [{ label: 'Achievements per Month', data: counts }] },
         options: opts
       });
-      if (note) note.textContent = 'No weights found; showing achievements per year.';
+      if (note) note.textContent = 'No weights found; showing achievements per month.';
     }
   });
 }
@@ -782,16 +776,10 @@ async function getAllImagesForKey(key) {
   const folder = slugify(a.title || 'achievement');
   const manifestUrl = `/_gallery/${folder}.json?t=${Date.now()}`;
   const dirUrl = ensureTrailingSlash(ASSETS_BASE) + folder + '/';
-  try {
-    const r = await fetch(manifestUrl, { cache: 'no-store' });
-    if (r.ok) {
-      const j = await r.json();
-      if (Array.isArray(j.images) && j.images.length) return j.images;
-    }
+  try { const r = await fetch(manifestUrl, { cache: 'no-store' });
+    if (r.ok) { const j = await r.json(); if (Array.isArray(j.images) && j.images.length) return j.images; }
   } catch {}
-  try {
-    return await listImagesInDir(dirUrl);
-  } catch { return []; }
+  try { return await listImagesInDir(dirUrl); } catch { return []; }
 }
 async function openGalleryForKey(key) {
   const imgs = await getAllImagesForKey(key);
@@ -804,17 +792,11 @@ function openLightbox(images, index = 0) {
   lightboxState.index = Math.max(0, Math.min(index, images.length - 1));
   updateLightbox();
   const lb = $('#lightbox');
-  if (lb) {
-    lb.hidden = false;
-    document.body.style.overflow = 'hidden';
-  }
+  if (lb) { lb.hidden = false; document.body.style.overflow = 'hidden'; }
 }
 function closeLightbox() {
   const lb = $('#lightbox');
-  if (lb) {
-    lb.hidden = true;
-    document.body.style.overflow = '';
-  }
+  if (lb) { lb.hidden = true; document.body.style.overflow = ''; }
 }
 function navLightbox(delta) {
   if (!lightboxState.images.length) return;
@@ -827,63 +809,32 @@ function updateLightbox() {
 }
 
 // ===== Linkify =====
-function escapeHTML(str) {
-  return String(str)
-    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-}
+function escapeHTML(str) { return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 function linkify(text) {
   if (!text) return '';
   let s = escapeHTML(text);
-
-  // http/https
-  s = s.replace(/\bhttps?:\/\/[^\s<)]+/gi, (m) =>
-    `<a href="${m}" target="_blank" rel="noopener noreferrer">${m}</a>`);
-
-  // www.*
-  s = s.replace(/(^|[\s(])(www\.[^\s<)]+)/gi, (_full, lead, host) =>
-    `${lead}<a href="https://${host}" target="_blank" rel="noopener noreferrer">${host}</a>`);
-
-  // line breaks
+  s = s.replace(/\bhttps?:\/\/[^\s<)]+/gi, (m) => `<a href="${m}" target="_blank" rel="noopener noreferrer">${m}</a>`);
+  s = s.replace(/(^|[\s(])(www\.[^\s<)]+)/gi, (_full, lead, host) => `${lead}<a href="https://${host}" target="_blank" rel="noopener noreferrer">${host}</a>`);
   s = s.replace(/\n/g, '<br>');
   return s;
 }
 
 // ===== Utils =====
-function formatDate(date) {
-  const options = { day: 'numeric', month: 'long' };
-  return date.toLocaleDateString(undefined, options);
-}
-function capitalizeFirstLetter(str) {
-  if (!str || typeof str !== 'string') return '';
-  return str.charAt(0).toUpperCase() + str.slice(1);
-}
+function formatDate(date) { return date.toLocaleDateString(undefined, { day: 'numeric', month: 'long' }); }
+function capitalizeFirstLetter(str) { if (!str || typeof str !== 'string') return ''; return str.charAt(0).toUpperCase() + str.slice(1); }
 function parseDDMMYYYY(s) {
   if (!s || typeof s !== 'string') return null;
   const parts = s.split('.');
   if (parts.length < 2) return null;
   const day = parseInt(parts[0], 10);
   const month = parseInt(parts[1], 10) - 1;
-
   let year = parts[2] ? parts[2].trim() : '';
   let yy = parseInt(year, 10);
   if (!Number.isFinite(yy)) yy = new Date().getFullYear();
   else if (year.length === 2) yy = yy <= 69 ? 2000 + yy : 1900 + yy;
-
   const d = new Date(yy, month, day);
   return isNaN(d.getTime()) ? null : d;
 }
-function ensureTrailingSlash(p) {
-  if (!p) return '/';
-  return p.endsWith('/') ? p : p + '/';
-}
-function resolveImageSrc(src, base) {
-  if (!src) return '';
-  if (/^([a-z]+:)?\/\//i.test(src) || src.startsWith('/')) return src;
-  return ensureTrailingSlash(base) + src.replace(/^\.?\//, '');
-}
-function slugify(str) {
-  return String(str || '')
-    .normalize('NFKD').replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase().replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
-}
+function ensureTrailingSlash(p) { if (!p) return '/'; return p.endsWith('/') ? p : p + '/'; }
+function resolveImageSrc(src, base) { if (!src) return ''; if (/^([a-z]+:)?\/\//i.test(src) || src.startsWith('/')) return src; return ensureTrailingSlash(base) + src.replace(/^\.?\//, ''); }
+function slugify(str) { return String(str || '').normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, ''); }

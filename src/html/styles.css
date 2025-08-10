@@ -28,7 +28,6 @@ body { font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
 .topbar { display: flex; align-items: center; justify-content: space-between; gap: 1rem;
           padding: 0.8rem 1rem; background: var(--card); box-shadow: var(--shadow);
           position: sticky; top: 0; z-index: 9; }
-/* brand removed */
 .controls { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; }
 
 /* Tabs */
@@ -93,9 +92,7 @@ h1 { margin: 6px 0 14px; }
 
 /* Achievements */
 .chart-card { background: var(--card); padding: 16px; border-radius: 12px; box-shadow: var(--shadow); margin-bottom: 18px; }
-/* chart header removed */
 
-/* fixed-height canvas wrapper */
 .chart-wrap {
   position: relative;
   height: 280px;
@@ -119,11 +116,12 @@ h1 { margin: 6px 0 14px; }
 .ach-meta { color: var(--muted); font-size: 14px; display: flex; align-items: center; gap: 6px; }
 .ach-desc { margin-top: 8px; }
 
-/* Weight stars */
+/* Weight stars (now yellow) */
 .stars { display: inline-flex; gap: 4px; align-items: center; margin-top: 6px; }
 .stars i { font-size: 16px; color: var(--muted); }
-.stars i.fill { color: var(--accent); }
+.stars i.fill { color: #f1c40f; }   /* yellow fill */
 
+/* Gallery */
 .gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
            gap: 10px; margin-top: 12px; }
 .thumb { border: 0; background: transparent; padding: 0; cursor: pointer; border-radius: 10px; overflow: hidden; box-shadow: var(--shadow); }
@@ -175,7 +173,7 @@ i.fa-chart-scatter::before { content: "\f7ee"; }
 #chart-tooltip.chart-tooltip {
   position: fixed;
   transform: none;
-  pointer-events: none;                 /* becomes auto when pinned via JS */
+  pointer-events: none;
   background: var(--card);
   color: var(--text);
   border: 1px solid rgba(0,0,0,0.12);

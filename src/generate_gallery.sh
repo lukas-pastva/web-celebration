@@ -1,15 +1,16 @@
 #!/bin/sh
 set -eu
+umask 022                       # ensure new files are world-readable
 
 OUT_DIR="/usr/share/nginx/html/_gallery"
 SRC_DIR="/data"
 
 mkdir -p "$OUT_DIR"
+chmod 755 "$OUT_DIR"            # directory readable/listable
 
 # Clear previous jsons
 find "$OUT_DIR" -type f -name '*.json' -exec rm -f {} \; 2>/dev/null || true
 
-# For each folder under /data, list image files and emit JSON
 for d in "$SRC_DIR"/*; do
   [ -d "$d" ] || continue
   base="$(basename "$d")"
@@ -23,8 +24,7 @@ for d in "$SRC_DIR"/*; do
       jpg|JPG|jpeg|JPEG|png|PNG|webp|WEBP|gif|GIF|bmp|BMP|svg|SVG)
         url="/data/$base/$(basename "$f")"
         if [ $first -eq 1 ]; then
-          printf '"%s"' "$url" >> "$tmp"
-          first=0
+          printf '"%s"' "$url" >> "$tmp"; first=0
         else
           printf ', "%s"' "$url" >> "$tmp"
         fi
@@ -33,5 +33,6 @@ for d in "$SRC_DIR"/*; do
   done
 
   echo '] }' >> "$tmp"
-  mv "$tmp" "$OUT_DIR/$base.json"
+  install -m 0644 "$tmp" "$OUT_DIR/$base.json"   # <-- readable by nginx
+  rm -f "$tmp"
 done

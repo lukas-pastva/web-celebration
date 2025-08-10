@@ -290,9 +290,13 @@ function renderAchievements(items, assetsBase) {
 
       // Try JSON manifest first (built at startup)
       fetch(manifestUrl, { cache: 'no-store' })
-        .then(res => res.ok ? res.json() : Promise.reject(new Error(`manifest ${res.status}`)))
+        .then(res => {
+          console.debug('manifest status', manifestUrl, res.status);
+          if (!res.ok) throw new Error(`manifest ${res.status}`);
+          return res.json();
+        })
         .then(json => Array.isArray(json.images) ? json.images : [])
-        .catch(() => []) // if manifest missing, fallback to autoindex
+        .catch(() => [])
         .then(async (images) => {
           if (images.length) return images;
           try { return await listImagesInDir(dirUrl); } catch { return []; }

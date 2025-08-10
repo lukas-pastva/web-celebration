@@ -13,7 +13,7 @@ let CHIPS_TYPES = [];       // discovered normalized types
 let HAS_UNTAGGED = false;
 let SELECTED_TYPES = new Set();
 const FILTER_KEY = 'wc_type_filter_v2';
-
+let FIRST_IMG = new Map();        // key -> first image URL
 
 // ===== State =====
 let lightboxState = { images: [], index: 0 };
@@ -184,6 +184,35 @@ function renderFiltered() {
   renderAchievements(items, ASSETS_BASE);
   renderAchievementsChart(items);
 }
+function achKey(a) {
+  return `${slugify(a.title || '')}_${(a.date || '').trim()}`;
+}
+
+function fetchFirstImage(a, assetsBase) {
+  // 1) explicit images
+  if (Array.isArray(a.images) && a.images.length) {
+    return Promise.resolve(resolveImageSrc(a.images[0], assetsBase));
+  }
+  // 2) manifest, then autoindex fallback
+  const folder = slugify(a.title || 'achievement');
+  const manifestUrl = `/_gallery/${folder}.json?t=${Date.now()}`;
+  const dirUrl = ensureTrailingSlash(assetsBase) + folder + '/';
+
+  return fetch(manifestUrl, { cache: 'no-store' })
+    .then(r => (r.ok ? r.json() : Promise.reject()))
+    .then(j => (Array.isArray(j.images) && j.images.length ? j.images[0] : null))
+    .catch(() => listImagesInDir(dirUrl).then(arr => (arr[0] || null)))
+    .catch(() => null);
+}
+
+function prefetchFirstImages(items, assetsBase) {
+  const tasks = items.map(a => {
+    const key = achKey(a);
+    if (FIRST_IMG.has(key)) return Promise.resolve();
+    return fetchFirstImage(a, assetsBase).then(u => { if (u) FIRST_IMG.set(key, u); });
+  });
+  return Promise.allSettled(tasks);
+}
 
 // ===== Boot =====
 document.addEventListener('DOMContentLoaded', () => {
@@ -313,6 +342,44 @@ function adaptUI(ctx) {
       }
     }
   }
+}
+function externalTooltipHandler(context) {
+  const { chart, tooltip } = context;
+  let el = chart.canvas.parentNode.querySelector('.chart-tooltip');
+
+  if (!el) {
+    el = document.createElement('div');
+    el.className = 'chart-tooltip';
+    el.style.opacity = '0';
+    chart.canvas.parentNode.appendChild(el);
+  }
+
+  if (tooltip.opacity === 0) { el.style.opacity = '0'; return; }
+
+  const dp = tooltip.dataPoints && tooltip.dataPoints[0];
+  const raw = dp ? dp.raw : null;
+  const title = raw?.title || '';
+  const descHtml = linkify(raw?.description || '');
+  const img = raw ? (FIRST_IMG.get(raw.key) || '') : '';
+
+  el.innerHTML = `
+    <div class="ct-head">${escapeHTML(title)}</div>
+    <div class="ct-body">
+      ${img ? `<img src="${img}" alt="${escapeHTML(title)}">` : `<div></div>`}
+      <div class="ct-text">
+        ${descHtml || '<em>No description</em>'}
+      </div>
+    </div>
+  `;
+
+  const { canvas } = chart;
+  const rect = canvas.getBoundingClientRect();
+  const left = rect.left + window.pageXOffset + tooltip.caretX;
+  const top  = rect.top  + window.pageYOffset + tooltip.caretY - 12;
+
+  el.style.opacity = '1';
+  el.style.left = `${left}px`;
+  el.style.top  = `${top}px`;
 }
 
 // ===== Tabs helpers =====
@@ -476,6 +543,7 @@ function renderAchievements(items, assetsBase) {
             gallery.appendChild(empty);
             return;
           }
+          if (images.length) FIRST_IMG.set(achKey(a), images[0]);
           buildGallery(gallery, images, a.title);
         })
         .catch(err => {
@@ -536,73 +604,65 @@ function renderAchievementsChart(items) {
 
   if (achievementsChart) { achievementsChart.destroy(); achievementsChart = null; }
 
-  // Build points: x = YEAR(parsed date), y = weight (1–5)
-  const points = items.map(a => {
-    const d = parseDDMMYYYY(a.date);
-    const year = d ? d.getFullYear() : null;
+  // Preload first images for tooltip, then draw
+  prefetchFirstImages(items, ASSETS_BASE).finally(() => {
+    const points = items.map(a => {
+      const d = parseDDMMYYYY(a.date);
+      const year = d ? d.getFullYear() : null;
+      let y = Number(a.weight);
+      if (!Number.isFinite(y) && a.xy && isFinite(+a.xy.y)) y = Number(a.xy.y); // legacy
+      if (!Number.isFinite(y) || !year) return null;
+      y = Math.max(1, Math.min(5, y));
+      return {
+        x: year, y,
+        title: a.title || '',
+        description: a.description || '',
+        key: achKey(a)
+      };
+    }).filter(Boolean);
 
-    // prefer `weight`; fall back to legacy `xy.y` if present
-    let y = Number(a.weight);
-    if (!Number.isFinite(y) && a.xy && isFinite(+a.xy.y)) y = Number(a.xy.y);
-    if (!Number.isFinite(y) || !year) return null;
-
-    // clamp to 1–5 just in case
-    y = Math.max(1, Math.min(5, y));
-    return { x: year, y, title: a.title || '' };
-  }).filter(Boolean);
-
-  const opts = {
-    responsive: true,
-    maintainAspectRatio: false,
-    animation: false,
-    devicePixelRatio: Math.min(window.devicePixelRatio || 1, 2),
-    plugins: {
-      legend: { display: false },
-      tooltip: { callbacks: { label: (ctx) => {
-        const d = ctx.raw; return `${d.title ? d.title + ' — ' : ''}Year: ${d.x}, Weight: ${d.y}`;
-      }}}
-    },
-    scales: {
-      x: {
-        type: 'linear',
-        title: { display: true, text: 'Year' },
-        ticks: { stepSize: 1, callback: v => Number(v).toFixed(0) }
+    const opts = {
+      responsive: true, maintainAspectRatio: false, animation: false,
+      devicePixelRatio: Math.min(window.devicePixelRatio || 1, 2),
+      interaction: { mode: 'nearest', intersect: true },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          enabled: false,          // we render our own
+          external: externalTooltipHandler
+        }
       },
-      y: {
-        title: { display: true, text: 'Weight (1–5)' },
-        min: 0.5,
-        max: 5.5,
-        ticks: { stepSize: 1 }
+      scales: {
+        x: { type: 'linear', title: { display: true, text: 'Year' }, ticks: { stepSize: 1, callback: v => Number(v).toFixed(0) } },
+        y: { title: { display: true, text: 'Weight (1–5)' }, min: 0.5, max: 5.5, ticks: { stepSize: 1 } }
       }
+    };
+
+    if (points.length) {
+      const xs = points.map(p => p.x);
+      opts.scales.x.min = Math.min(...xs) - 1;
+      opts.scales.x.max = Math.max(...xs) + 1;
+
+      achievementsChart = new Chart(canvas, {
+        type: 'scatter',
+        data: { datasets: [{ label: 'Achievements', data: points, pointRadius: 5 }] },
+        options: opts
+      });
+      if (note) note.textContent = 'Scatter: Year vs Weight (1–5). Hover points for image + description.';
+    } else {
+      const byYear = {};
+      items.forEach(a => { const d = parseDDMMYYYY(a.date); if (d) byYear[d.getFullYear()] = (byYear[d.getFullYear()] || 0) + 1; });
+      const labels = Object.keys(byYear).sort((a,b) => +a - +b);
+      const counts = labels.map(y => byYear[y]);
+
+      achievementsChart = new Chart(canvas, {
+        type: 'bar',
+        data: { labels, datasets: [{ label: 'Achievements per Year', data: counts }] },
+        options: opts
+      });
+      if (note) note.textContent = 'No weights found; showing achievements per year.';
     }
-  };
-
-  if (points.length) {
-    // nice padding around min/max year
-    const xs = points.map(p => p.x);
-    opts.scales.x.min = Math.min(...xs) - 1;
-    opts.scales.x.max = Math.max(...xs) + 1;
-
-    achievementsChart = new Chart(canvas, {
-      type: 'scatter',
-      data: { datasets: [{ label: 'Achievements', data: points, pointRadius: 5 }] },
-      options: opts
-    });
-    if (note) note.textContent = 'Scatter: Year vs Weight (1–5).';
-  } else {
-    // Fallback: bar counts per year (if weight/date missing)
-    const byYear = {};
-    items.forEach(a => { const d = parseDDMMYYYY(a.date); if (d) byYear[d.getFullYear()] = (byYear[d.getFullYear()] || 0) + 1; });
-    const labels = Object.keys(byYear).sort((a,b) => +a - +b);
-    const counts = labels.map(y => byYear[y]);
-
-    achievementsChart = new Chart(canvas, {
-      type: 'bar',
-      data: { labels, datasets: [{ label: 'Achievements per Year', data: counts }] },
-      options: opts
-    });
-    if (note) note.textContent = 'No weights found; showing achievements per year.';
-  }
+  });
 }
 
 

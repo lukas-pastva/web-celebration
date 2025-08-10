@@ -9,7 +9,11 @@ const eventIcons = {
 
 let ALL_ACH = [];
 let ASSETS_BASE = '';
-const FILTER_KEY = 'wc_type_filter';
+let CHIPS_TYPES = [];       // discovered normalized types
+let HAS_UNTAGGED = false;
+let SELECTED_TYPES = new Set();
+const FILTER_KEY = 'wc_type_filter_v2';
+
 
 // ===== State =====
 let lightboxState = { images: [], index: 0 };
@@ -52,14 +56,14 @@ function updateThemeToggleIcon(theme) {
   }
 }
 function normTypes(val) {
-  // Accept: "type", "type1,type2", ["type1","type2"], or undefined
   let arr = [];
   if (Array.isArray(val)) arr = val;
   else if (typeof val === 'string') arr = val.split(/[,\|]/);
   return arr.map(s => s.trim().toLowerCase()).filter(Boolean);
 }
-function titlecase(s) { return String(s).replace(/\b\w/g, c => c.toUpperCase()); }
-
+function titlecase(s) {
+  return String(s).replace(/\b([a-z])/g, m => m.toUpperCase()).replace(/[-_]/g, ' ');
+}
 function getFilteredAchievements() {
   const select = document.getElementById('typeSelect');
   const sel = select ? select.value : '__all';
@@ -74,44 +78,111 @@ function renderFiltered() {
   renderAchievementsChart(items);
 }
 
-// Build the filter UI dynamically
-function setupTypeFilter(items) {
+function setupTypeChips(items) {
   const wrap = document.getElementById('typeFilter');
-  const sel  = document.getElementById('typeSelect');
-  if (!wrap || !sel) return;
+  const chipsHost = document.getElementById('typeChips');
+  if (!wrap || !chipsHost) return;
 
+  // Discover types
   const set = new Set();
-  let hasUntagged = false;
+  HAS_UNTAGGED = false;
   items.forEach(a => {
     const t = normTypes(a.type);
-    if (t.length === 0) hasUntagged = true;
+    if (t.length === 0) HAS_UNTAGGED = true;
     t.forEach(x => set.add(x));
   });
+  CHIPS_TYPES = Array.from(set).sort();
 
-  const types = Array.from(set).sort();
-  const shouldShow = (types.length > 1) || hasUntagged;
+  const shouldShow = (CHIPS_TYPES.length > 1) || HAS_UNTAGGED;
   if (!shouldShow) { wrap.hidden = true; return; }
 
-  // Build options
-  sel.innerHTML = '';
-  const opt = (value, label) => {
-    const o = document.createElement('option');
-    o.value = value; o.textContent = label; return o;
-  };
-  sel.appendChild(opt('__all', 'All types'));
-  types.forEach(t => sel.appendChild(opt(t, titlecase(t))));
-  if (hasUntagged) sel.appendChild(opt('__untagged', 'Unlabeled'));
+  // Restore selection
+  SELECTED_TYPES = restoreChipSelection();
 
-  // Restore saved selection if valid
-  const valid = new Set(['__all','__untagged', ...types]);
-  const saved = localStorage.getItem(FILTER_KEY);
-  sel.value = (saved && valid.has(saved)) ? saved : '__all';
+  // Build chips
+  chipsHost.innerHTML = '';
+  // "All" convenience chip
+  chipsHost.appendChild(makeChip('__all', 'All'));
 
+  CHIPS_TYPES.forEach(t => chipsHost.appendChild(makeChip(t, titlecase(t))));
+  if (HAS_UNTAGGED) chipsHost.appendChild(makeChip('__untagged', 'Untagged'));
+
+  // Reflect selection
+  updateChipPressedStates();
   wrap.hidden = false;
-  on(sel, 'change', () => {
-    localStorage.setItem(FILTER_KEY, sel.value);
+}
+
+function makeChip(value, label) {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'chip';
+  btn.setAttribute('data-value', value);
+  btn.setAttribute('aria-pressed', SELECTED_TYPES.has(value) ? 'true' : 'false');
+  btn.textContent = label;
+
+  btn.addEventListener('click', () => {
+    if (value === '__all') {
+      // Selecting "All" deselects others
+      SELECTED_TYPES = new Set(['__all']);
+    } else {
+      // Toggle value
+      SELECTED_TYPES.delete('__all');
+      if (SELECTED_TYPES.has(value)) SELECTED_TYPES.delete(value);
+      else SELECTED_TYPES.add(value);
+
+      // If nothing left, revert to "All"
+      if (SELECTED_TYPES.size === 0) SELECTED_TYPES.add('__all');
+    }
+    persistChipSelection();
+    updateChipPressedStates();
     renderFiltered();
   });
+
+  return btn;
+}
+
+function updateChipPressedStates() {
+  const chipsHost = document.getElementById('typeChips');
+  if (!chipsHost) return;
+  const chips = chipsHost.querySelectorAll('.chip');
+  chips.forEach(chip => {
+    const v = chip.getAttribute('data-value');
+    chip.setAttribute('aria-pressed', SELECTED_TYPES.has(v) ? 'true' : 'false');
+  });
+}
+
+function persistChipSelection() {
+  if (SELECTED_TYPES.has('__all')) {
+    localStorage.setItem(FILTER_KEY, JSON.stringify(['__all']));
+  } else {
+    localStorage.setItem(FILTER_KEY, JSON.stringify(Array.from(SELECTED_TYPES)));
+  }
+}
+
+function restoreChipSelection() {
+  try {
+    const raw = localStorage.getItem(FILTER_KEY);
+    if (!raw) return new Set(['__all']);
+    const arr = JSON.parse(raw);
+    if (Array.isArray(arr) && arr.length) return new Set(arr);
+  } catch {}
+  return new Set(['__all']);
+}
+
+function getFilteredAchievements() {
+  if (SELECTED_TYPES.has('__all')) return ALL_ACH;
+  return ALL_ACH.filter(a => {
+    const tags = normTypes(a.type);
+    const matchTagged = tags.some(t => SELECTED_TYPES.has(t));
+    const matchUntagged = (tags.length === 0 && SELECTED_TYPES.has('__untagged'));
+    return matchTagged || matchUntagged;
+  });
+}
+
+function renderFiltered() {
+  const items = getFilteredAchievements();
+  renderAchievements(items, ASSETS_BASE);
+  renderAchievementsChart(items);
 }
 
 // ===== Boot =====
@@ -172,19 +243,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
       const intro = (typeof data.intro === 'string') ? data.intro : '';
       const introEl = $('#introText'); if (introEl && intro.trim()) introEl.innerHTML = linkify(intro);
-
-      // Celebrations
       const haveCelebrations = celebrations.length > 0;
+      const haveAchievements = achievements.length > 0;
+
       if (haveCelebrations) renderCalendar(celebrations);
 
-      // Achievements with filter
-      const haveAchievements = achievements.length > 0;
       ALL_ACH = achievements;
       ASSETS_BASE = assetsBase;
 
       if (haveAchievements) {
-        setupTypeFilter(ALL_ACH);
-        renderFiltered();           // renders BOTH list + chart using the current filter
+        setupTypeChips(ALL_ACH); // builds chips and selection
+        renderFiltered();        // renders list + chart using current multi-select
       }
 
       adaptUI({
@@ -192,7 +261,6 @@ document.addEventListener('DOMContentLoaded', () => {
         tabsContainer, tabCelebrations, tabAchievements,
         viewCelebrations, viewAchievements
       });
-
 
     })
     .catch(err => console.error('Error loading YAML:', err));

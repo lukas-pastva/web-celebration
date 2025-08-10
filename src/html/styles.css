@@ -135,12 +135,27 @@ i.fa-chart-scatter::before { content: "\f7ee"; }
   margin: 8px 0 14px;
 }
 .type-filter i { color: var(--accent); }
-.type-filter select {
-  background: var(--card); color: var(--text);
-  border: 1px solid rgba(0,0,0,0.1);
-  padding: 6px 10px; border-radius: 8px;
+/* Multi-select chips */
+.type-filter { display: flex; align-items: center; gap: 10px; margin: 8px 0 14px; flex-wrap: wrap; }
+.type-filter i { color: var(--accent); }
+
+.chip-wrap { display: flex; gap: 8px; flex-wrap: wrap; }
+.chip {
+  border: 1px solid rgba(0,0,0,0.12);
+  background: var(--card);
+  color: var(--text);
+  padding: 6px 10px;
+  border-radius: 999px;
+  cursor: pointer;
   box-shadow: var(--shadow);
+  font-size: 14px;
+  user-select: none;
 }
+.chip[aria-pressed="true"] {
+  outline: 2px solid var(--accent);
+  background: color-mix(in oklab, var(--accent) 12%, var(--card));
+}
+
 
 /* optional: accessible-only label */
 .sr-only {

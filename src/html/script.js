@@ -60,6 +60,16 @@ function updateThemeToggleIcon(theme) {
   }
 }
 
+// ===== Color-by-type helpers =====
+function djb2(str) { let h = 5381; for (let i = 0; i < str.length; i++) h = ((h << 5) + h) + str.charCodeAt(i); return h >>> 0; }
+function colorForType(t) {
+  const key = String((t || 'other')).toLowerCase();
+  const hue = djb2(key) % 360;
+  const sat = 60;                          // fairly soft
+  const light = currentTheme() === 'dark' ? 60 : 52;
+  return `hsl(${hue}, ${sat}%, ${light}%)`;
+}
+
 // ===== Type helpers (chips) =====
 function normTypes(val) {
   let arr = [];
@@ -277,7 +287,7 @@ function adaptUI(ctx) {
   }
 }
 
-// ===== Global, fixed tooltip handler =====
+// ===== Tooltip (fixed-position, clickable) =====
 function externalTooltipHandler(context) {
   const { chart, tooltip } = context;
 
@@ -384,6 +394,7 @@ function renderCalendar(events) {
     const mm = parseInt(month, 10) - 1;
     let yy = parseInt(year, 10);
 
+    // 2-digit years supported
     if (!Number.isFinite(yy)) yy = currentYear;
     else if (year && year.length === 2) yy = yy <= 69 ? 2000 + yy : 1900 + yy;
 
@@ -403,19 +414,27 @@ function renderCalendar(events) {
     const contentDiv = document.createElement('div');
     contentDiv.classList.add('content');
 
+    // per-type tint
+    const tint = colorForType(event.type);
+    contentDiv.style.setProperty('--tint', tint);
+
     const icon = document.createElement('i');
     icon.classList.add('fa-solid', eventIcons[event.type] || 'fa-star', 'icon');
     contentDiv.appendChild(icon);
 
     const title = document.createElement('div');
     title.classList.add('title');
-    title.textContent = capitalizeFirstLetter(event.type || 'event');
+    title.textContent = capitalizeFirstLetter(event.name || event.type || 'event');
     contentDiv.appendChild(title);
 
-    const name = document.createElement('div');
-    name.classList.add('name');
-    name.textContent = event.name || '';
-    contentDiv.appendChild(name);
+    const metaTypeRow = document.createElement('div');
+    metaTypeRow.className = 'type-row';
+    const pill = document.createElement('span');
+    pill.className = 'type-pill';
+    pill.style.setProperty('--tint', tint);
+    pill.innerHTML = `<span class="dot"></span>${escapeHTML(capitalizeFirstLetter(event.type || ''))}`;
+    metaTypeRow.appendChild(pill);
+    contentDiv.appendChild(metaTypeRow);
 
     const date = document.createElement('div');
     date.classList.add('date');
@@ -469,6 +488,11 @@ function renderAchievements(items, assetsBase) {
     card.dataset.key = key;
     MAP_ACH.set(key, a);
 
+    // choose primary tint from first type (if any)
+    const types = normTypes(a.type);
+    const primaryTint = colorForType(types[0] || 'other');
+    card.style.setProperty('--tint', primaryTint);
+
     const header = document.createElement('div');
     header.classList.add('ach-header');
 
@@ -492,6 +516,20 @@ function renderAchievements(items, assetsBase) {
     }
 
     card.appendChild(header);
+
+    // type pills row (can be multiple)
+    if (types.length) {
+      const row = document.createElement('div');
+      row.className = 'type-row';
+      types.forEach(t => {
+        const pill = document.createElement('span');
+        pill.className = 'type-pill';
+        pill.style.setProperty('--tint', colorForType(t));
+        pill.innerHTML = `<span class="dot"></span>${escapeHTML(titlecase(t))}`;
+        row.appendChild(pill);
+      });
+      card.appendChild(row);
+    }
 
     if (a.description) {
       const desc = document.createElement('p');
@@ -611,21 +649,20 @@ function fetchFirstImage(a, assetsBase) {
     .catch(() => null);
 }
 
-// NEW: fractional-year helpers for month-level axis
+// fractional-year helpers for month-level axis
 const MONTH_ABBR = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 function fractionalYear(d) {
   const y = d.getFullYear();
   const m = d.getMonth();        // 0..11
   const days = new Date(y, m + 1, 0).getDate();
   const day = d.getDate();
-  const frac = m / 12 + ((day - 1) / days) / 12;  // month + day fraction
+  const frac = m / 12 + ((day - 1) / days) / 12;
   return y + frac;
 }
 function labelFromFractionalYear(v) {
   const y = Math.floor(v);
   let rem = v - y;
   if (rem < 0) rem = 0;
-  // avoid rounding up to 12
   let idx = Math.floor(rem * 12 + 1e-6);
   if (idx > 11) idx = 11;
   return `${MONTH_ABBR[idx]} ${y}`;
@@ -641,12 +678,19 @@ function renderAchievementsChart(items) {
     const points = items.map(a => {
       const d = parseDDMMYYYY(a.date);
       if (!d) return null;
-      const x = fractionalYear(d);           // <— month resolution
+      const x = fractionalYear(d);
       let y = Number(a.weight);
       if (!Number.isFinite(y) && a.xy && isFinite(+a.xy.y)) y = Number(a.xy.y); // legacy
       if (!Number.isFinite(y)) return null;
       y = Math.max(1, Math.min(5, Math.round(y)));
-      return { x, y, title: a.title || '', description: a.description || '', key: achKey(a) };
+      const types = normTypes(a.type);
+      return {
+        x, y,
+        title: a.title || '',
+        description: a.description || '',
+        key: achKey(a),
+        typeColor: colorForType(types[0] || 'other')
+      };
     }).filter(Boolean);
 
     const opts = {
@@ -664,10 +708,10 @@ function renderAchievementsChart(items) {
           type: 'linear',
           title: { display: true, text: 'Month' },
           ticks: {
-            stepSize: 1/12,                    // monthly ticks
+            stepSize: 1/12,
             callback: (v) => labelFromFractionalYear(v),
             autoSkip: true,
-            maxTicksLimit: 24                   // keep labels readable
+            maxTicksLimit: 24
           },
           grid: { drawTicks: true }
         },
@@ -708,7 +752,7 @@ function renderAchievementsChart(items) {
 
     if (points.length) {
       const xs = points.map(p => p.x);
-      opts.scales.x.min = Math.min(...xs) - 1/24;  // half-month padding
+      opts.scales.x.min = Math.min(...xs) - 1/24;
       opts.scales.x.max = Math.max(...xs) + 1/24;
 
       achievementsChart = new Chart(canvas, {
@@ -718,11 +762,12 @@ function renderAchievementsChart(items) {
             label: 'Achievements',
             data: points,
             pointStyle: 'star',
-            pointRadius: 10,                 // larger stars
+            pointRadius: 10,
             pointHoverRadius: 13,
             hitRadius: 16,
             borderWidth: 2,
-            pointBackgroundColor: '#f1c40f', // yellow stars
+            // keep stars yellow for rating look (as requested earlier)
+            pointBackgroundColor: '#f1c40f',
             pointBorderColor: '#f1c40f',
             pointHoverBackgroundColor: '#f1c40f',
             pointHoverBorderColor: '#f1c40f'
@@ -828,10 +873,12 @@ function parseDDMMYYYY(s) {
   if (parts.length < 2) return null;
   const day = parseInt(parts[0], 10);
   const month = parseInt(parts[1], 10) - 1;
+
   let year = parts[2] ? parts[2].trim() : '';
   let yy = parseInt(year, 10);
   if (!Number.isFinite(yy)) yy = new Date().getFullYear();
   else if (year.length === 2) yy = yy <= 69 ? 2000 + yy : 1900 + yy;
+
   const d = new Date(yy, month, day);
   return isNaN(d.getTime()) ? null : d;
 }

@@ -42,17 +42,12 @@ body { font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
   position: fixed;
   right: 16px;
   bottom: 16px;
-  width: 48px;
-  height: 48px;
-  display: grid;
-  place-items: center;
-  border-radius: 12px;
-  border: 0;
-  background: var(--card);
-  color: var(--text);
+  width: 48px; height: 48px;
+  display: grid; place-items: center;
+  border-radius: 12px; border: 0;
+  background: var(--card); color: var(--text);
   box-shadow: var(--shadow);
-  z-index: 10000;
-  cursor: pointer;
+  z-index: 10000; cursor: pointer;
 }
 .fab-theme i { font-size: 18px; }
 
@@ -71,15 +66,31 @@ h1 { margin: 6px 0 14px; }
 .event { position: relative; width: 50%; padding: 10px 40px; }
 .event.left { left: 0; text-align: right; }
 .event.right { left: 50%; text-align: left; }
-.event .content { background: var(--card); padding: 15px; border-radius: 10px; position: relative; box-shadow: var(--shadow); }
+.event .content {
+  background: var(--card); padding: 15px; border-radius: 10px; position: relative; box-shadow: var(--shadow);
+  outline: 2px solid color-mix(in oklab, var(--tint, var(--accent)) 22%, transparent);
+}
 .event.left .content::after { content: ""; position: absolute; top: 15px; right: -8px;
   border-width: 8px 0 8px 8px; border-style: solid; border-color: transparent transparent transparent var(--card); }
 .event.right .content::after { content: ""; position: absolute; top: 15px; left: -8px;
   border-width: 8px 8px 8px 0; border-style: solid; border-color: transparent var(--card) transparent transparent; }
-.event .icon { font-size: 22px; margin-bottom: 8px; color: var(--accent); }
+.event .icon { font-size: 22px; margin-bottom: 8px; color: var(--tint, var(--accent)); }
 .event .title { font-size: 18px; font-weight: 800; margin-bottom: 4px; }
 .event .name { font-size: 16px; margin-bottom: 4px; }
 .event .date { font-size: 13px; color: var(--muted); }
+.event .type-row { margin-top: 8px; }
+
+/* Type pill (used by celebrations & achievements) */
+.type-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.type-pill {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 12px;
+  background: color-mix(in oklab, var(--tint, var(--accent)) 18%, var(--card));
+  border: 1px solid color-mix(in oklab, var(--tint, var(--accent)) 55%, transparent);
+  color: var(--text);
+  padding: 2px 8px; border-radius: 999px;
+}
+.type-pill .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--tint, var(--accent)); }
 
 @media (max-width: 768px) {
   #calendar::before { left: 20px; }
@@ -99,27 +110,28 @@ h1 { margin: 6px 0 14px; }
   overflow: hidden;
 }
 .chart-wrap > canvas {
-  position: absolute;
-  inset: 0;
-  width: 100% !important;
-  height: 100% !important;
-  display: block;
+  position: absolute; inset: 0;
+  width: 100% !important; height: 100% !important; display: block;
 }
 
 .achievements-header { margin: 6px 0 10px; }
 .chart-note { margin-top: 8px; font-size: 13px; color: var(--muted); }
 
 .achievements-list { display: grid; grid-template-columns: 1fr; gap: 16px; }
-.ach-card { background: var(--card); border-radius: 12px; box-shadow: var(--shadow); padding: 16px; }
+.ach-card {
+  background: var(--card); border-radius: 12px; box-shadow: var(--shadow); padding: 16px;
+  border-left: 4px solid color-mix(in oklab, var(--tint, transparent) 70%, transparent);
+}
 .ach-header { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
 .ach-header h3 { font-size: 20px; font-weight: 800; }
 .ach-meta { color: var(--muted); font-size: 14px; display: flex; align-items: center; gap: 6px; }
 .ach-desc { margin-top: 8px; }
+.ach-card .type-row { margin-top: 8px; }
 
-/* Weight stars (now yellow) */
+/* Weight stars (yellow) */
 .stars { display: inline-flex; gap: 4px; align-items: center; margin-top: 6px; }
 .stars i { font-size: 16px; color: var(--muted); }
-.stars i.fill { color: #f1c40f; }   /* yellow fill */
+.stars i.fill { color: #f1c40f; }
 
 /* Gallery */
 .gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));

@@ -12,11 +12,11 @@ achievements:
     type: personal
     description: >
       Ran my first full marathon in under 4 hours.
-    xy: { x: 2022, y: 42.195 }
+    weight: 1
 
   - title: Promoted to Staff Engineer
     date: 02.03.2023
     type: [career, milestone]
     description: >
       Led the migration to Kubernetes and GitOps.
-    xy: { x: 2023, y: 2 }
+    weight: 2

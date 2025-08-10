@@ -466,35 +466,63 @@ function renderAchievementsChart(items) {
   const note   = document.getElementById('chartNote');
   if (!canvas) return;
 
-  // Kill any previous instance (prevents multiple ResizeObservers)
   if (achievementsChart) { achievementsChart.destroy(); achievementsChart = null; }
 
-  const xyPoints = items
-    .filter(a => a.xy && isFinite(+a.xy.x) && isFinite(+a.xy.y))
-    .map(a => ({ x: Number(a.xy.x), y: Number(a.xy.y), title: a.title || '' }));
+  // Build points: x = YEAR(parsed date), y = weight (1–5)
+  const points = items.map(a => {
+    const d = parseDDMMYYYY(a.date);
+    const year = d ? d.getFullYear() : null;
+
+    // prefer `weight`; fall back to legacy `xy.y` if present
+    let y = Number(a.weight);
+    if (!Number.isFinite(y) && a.xy && isFinite(+a.xy.y)) y = Number(a.xy.y);
+    if (!Number.isFinite(y) || !year) return null;
+
+    // clamp to 1–5 just in case
+    y = Math.max(1, Math.min(5, y));
+    return { x: year, y, title: a.title || '' };
+  }).filter(Boolean);
 
   const opts = {
     responsive: true,
     maintainAspectRatio: false,
     animation: false,
-    devicePixelRatio: Math.min(window.devicePixelRatio || 1, 2), // optional: cap DPR to tame scaling
+    devicePixelRatio: Math.min(window.devicePixelRatio || 1, 2),
     plugins: {
       legend: { display: false },
       tooltip: { callbacks: { label: (ctx) => {
-        const d = ctx.raw; return `${d.title ? d.title + ' — ' : ''}x: ${d.x}, y: ${d.y}`;
+        const d = ctx.raw; return `${d.title ? d.title + ' — ' : ''}Year: ${d.x}, Weight: ${d.y}`;
       }}}
     },
-    scales: { x: { title: { display: true, text: 'X' } }, y: { title: { display: true, text: 'Y' } } }
+    scales: {
+      x: {
+        type: 'linear',
+        title: { display: true, text: 'Year' },
+        ticks: { stepSize: 1, callback: v => Number(v).toFixed(0) }
+      },
+      y: {
+        title: { display: true, text: 'Weight (1–5)' },
+        min: 0.5,
+        max: 5.5,
+        ticks: { stepSize: 1 }
+      }
+    }
   };
 
-  if (xyPoints.length) {
+  if (points.length) {
+    // nice padding around min/max year
+    const xs = points.map(p => p.x);
+    opts.scales.x.min = Math.min(...xs) - 1;
+    opts.scales.x.max = Math.max(...xs) + 1;
+
     achievementsChart = new Chart(canvas, {
       type: 'scatter',
-      data: { datasets: [{ label: 'Achievements', data: xyPoints, pointRadius: 5 }] },
+      data: { datasets: [{ label: 'Achievements', data: points, pointRadius: 5 }] },
       options: opts
     });
-    if (note) note.textContent = 'Showing XY scatter from achievement data.';
+    if (note) note.textContent = 'Scatter: Year vs Weight (1–5).';
   } else {
+    // Fallback: bar counts per year (if weight/date missing)
     const byYear = {};
     items.forEach(a => { const d = parseDDMMYYYY(a.date); if (d) byYear[d.getFullYear()] = (byYear[d.getFullYear()] || 0) + 1; });
     const labels = Object.keys(byYear).sort((a,b) => +a - +b);
@@ -505,7 +533,7 @@ function renderAchievementsChart(items) {
       data: { labels, datasets: [{ label: 'Achievements per Year', data: counts }] },
       options: opts
     });
-    if (note) note.textContent = 'No XY data found; showing achievements per year.';
+    if (note) note.textContent = 'No weights found; showing achievements per year.';
   }
 }
 

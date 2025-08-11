@@ -426,30 +426,48 @@ function renderAchievementsChart(items){
   }
 }
 
-function externalTooltipHandler(context){
+function externalTooltipHandler(context) {
   const { chart, tooltip } = context;
-  let el = chart.canvas.parentNode.querySelector('.chart-tooltip');
-  if(!el){ el=document.createElement('div'); el.className='chart-tooltip'; el.style.opacity='0'; chart.canvas.parentNode.appendChild(el); }
-  if(tooltip.opacity===0){ el.style.opacity='0'; return; }
 
-  const dp=tooltip.dataPoints && tooltip.dataPoints[0];
-  const raw=dp?dp.raw:null;
-  const title=raw?.title||''; const descHtml=linkify(raw?.description||''); const key=raw?.key||'';
+  // Use a single global tooltip, attached to <body>, with the id CSS expects
+  let el = document.getElementById('chart-tooltip');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'chart-tooltip';
+    el.className = 'chart-tooltip';
+    el.style.opacity = '0';
+    document.body.appendChild(el);
+  }
 
-  let img = FIRST_IMG.get(key) || '';
-  if(!img && PREFETCH_MODE!=='none'){ maybeEnsureFirstImage(raw).then(url=>{ if(url && el.style.opacity!=='0'){ const body=el.querySelector('.ct-body'); if(body){ body.innerHTML=`<img src="${url}" alt="${escapeHTML(title)}"><div class="ct-text">${descHtml||'<em>No description</em>'}</div>`; } } }); }
+  if (tooltip.opacity === 0) {
+    el.style.opacity = '0';
+    return;
+  }
 
-  el.innerHTML=`
+  const dp = tooltip.dataPoints && tooltip.dataPoints[0];
+  const raw = dp ? dp.raw : null;
+  const title = raw?.title || '';
+  const descHtml = linkify(raw?.description || '');
+  const key = raw?.key || '';
+  const img = FIRST_IMG.get(key) || '';
+
+  el.innerHTML = `
+    <button class="ct-close" aria-label="Close">×</button>
     <div class="ct-head">${escapeHTML(title)}</div>
     <div class="ct-body">
-      ${img ? `<img src="${img}" alt="${escapeHTML(title)}">` : `<div></div>`}
+      ${img ? `<img class="ct-img" src="${img}" alt="${escapeHTML(title)}">` : `<div></div>`}
       <div class="ct-text">${descHtml || '<em>No description</em>'}</div>
     </div>
   `;
-  const rect=chart.canvas.getBoundingClientRect();
-  const left=rect.left+window.pageXOffset+tooltip.caretX;
-  const top =rect.top +window.pageYOffset+tooltip.caretY-12;
-  el.style.opacity='1'; el.style.left=`${left}px`; el.style.top=`${top}px`;
+
+  // Position for a FIXED element (viewport coords — no page offsets)
+  const rect = chart.canvas.getBoundingClientRect();
+  const left = rect.left + tooltip.caretX;
+  const top  = rect.top  + tooltip.caretY - 12;
+
+  el.style.opacity = '1';
+  el.style.left = `${left}px`;
+  el.style.top  = `${top}px`;
 }
 
 function maybeEnsureFirstImage(raw){

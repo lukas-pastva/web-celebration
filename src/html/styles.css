@@ -185,6 +185,9 @@ i.fa-chart-scatter::before { content: "\f7ee"; }
 }
 
 /* Global, clickable chart tooltip (fixed) */
+/* Fallback so .chart-tooltip without #id still has a bg */
+.chart-tooltip { background: var(--card); color: var(--text); }
+
 #chart-tooltip.chart-tooltip {
   position: fixed;
   transform: none;

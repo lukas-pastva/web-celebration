@@ -159,13 +159,12 @@ i.fa-chart-scatter::before { content: "\f7ee"; }
   display: flex; align-items: center; gap: 10px; margin: 8px 0 14px; flex-wrap: wrap;
 }
 .type-filter i { color: var(--accent); }
+/* Multi-select chips (color-aware) */
 .chip-wrap { display: flex; gap: 8px; flex-wrap: wrap; }
-
-/* Colored chips */
 .chip {
-  display: inline-flex; align-items: center; gap: 8px;
-  border: 1px solid color-mix(in oklab, var(--tint, var(--accent)) 45%, transparent);
-  background: color-mix(in oklab, var(--tint, var(--accent)) 12%, var(--card));
+  --chip-color: var(--accent);
+  border: 1px solid color-mix(in oklab, var(--chip-color) 40%, var(--card));
+  background: color-mix(in oklab, var(--chip-color) 10%, var(--card));
   color: var(--text);
   padding: 6px 10px;
   border-radius: 999px;
@@ -174,10 +173,9 @@ i.fa-chart-scatter::before { content: "\f7ee"; }
   font-size: 14px;
   user-select: none;
 }
-.chip .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--tint, var(--accent)); }
 .chip[aria-pressed="true"] {
-  outline: 2px solid var(--tint, var(--accent));
-  background: color-mix(in oklab, var(--tint, var(--accent)) 22%, var(--card));
+  outline: 2px solid var(--chip-color);
+  background: color-mix(in oklab, var(--chip-color) 18%, var(--card));
 }
 
 /* Screen-reader only helper */

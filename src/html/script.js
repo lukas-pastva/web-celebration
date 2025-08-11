@@ -60,14 +60,31 @@ function updateThemeToggleIcon(theme) {
   }
 }
 
-// ===== Color-by-type helpers =====
+// ===== Type → color mapping =====
+// Prefer distinct, curated colors for common types. Fallback to a wide palette by hash.
+const PREFERRED_COLORS = {
+  career:   '#3b82f6', // blue
+  personal: '#ec4899', // pink
+  hobby:    '#8b5cf6', // purple
+  altruism: '#10b981', // emerald
+  milestone:'#f59e0b', // amber
+  travel:   '#06b6d4', // cyan
+  family:   '#22c55e', // green
+  finance:  '#f97316', // orange
+  health:   '#ef4444', // red
+  education:'#a855f7'  // violet
+};
+const PALETTE = [
+  '#2563eb','#ef4444','#10b981','#f59e0b','#8b5cf6','#14b8a6',
+  '#eab308','#ec4899','#22c55e','#a855f7','#06b6d4','#f97316',
+  '#84cc16','#f43f5e','#0ea5e9','#7c3aed'
+];
 function djb2(str) { let h = 5381; for (let i = 0; i < str.length; i++) h = ((h << 5) + h) + str.charCodeAt(i); return h >>> 0; }
 function colorForType(t) {
   const key = String((t || 'other')).toLowerCase();
-  const hue = djb2(key) % 360;
-  const sat = 60;
-  const light = currentTheme() === 'dark' ? 60 : 52;
-  return `hsl(${hue}, ${sat}%, ${light}%)`;
+  if (PREFERRED_COLORS[key]) return PREFERRED_COLORS[key];
+  const idx = djb2(key) % PALETTE.length;
+  return PALETTE[idx];
 }
 
 // ===== Type helpers (chips) =====
@@ -99,13 +116,11 @@ function makeChip(value, label) {
   btn.setAttribute('data-value', value);
   btn.setAttribute('aria-pressed', SELECTED_TYPES.has(value) ? 'true' : 'false');
 
-  // Give type chips their own tint; neutral for special chips
   if (value !== '__all' && value !== '__untagged') {
     const tint = colorForType(value);
     btn.style.setProperty('--tint', tint);
     btn.innerHTML = `<span class="dot" aria-hidden="true"></span>${escapeHTML(label)}`;
   } else {
-    // keep "All" and "Untagged" readable; still slightly tinted with accent
     btn.style.setProperty('--tint', 'var(--accent)');
     btn.textContent = label;
   }
@@ -301,6 +316,14 @@ function adaptUI(ctx) {
       }
     }
   }
+}
+
+// ===== Chart loader helpers =====
+function setChartLoading(on = true) {
+  const loader = $('#chartLoader');
+  if (!loader) return;
+  loader.hidden = !on;
+  loader.setAttribute('aria-busy', on ? 'true' : 'false');
 }
 
 // ===== Tooltip (fixed-position, clickable) =====
@@ -674,6 +697,8 @@ function renderAchievementsChart(items) {
   if (!canvas) return;
   if (achievementsChart) { achievementsChart.destroy(); achievementsChart = null; }
 
+  setChartLoading(true);
+
   prefetchFirstImages(items, ASSETS_BASE).finally(() => {
     const points = items.map(a => {
       const d = parseDDMMYYYY(a.date);
@@ -766,7 +791,7 @@ function renderAchievementsChart(items) {
             pointHoverRadius: 13,
             hitRadius: 16,
             borderWidth: 2,
-            pointBackgroundColor: '#f1c40f',
+            pointBackgroundColor: '#f1c40f',   // yellow stars
             pointBorderColor: '#f1c40f',
             pointHoverBackgroundColor: '#f1c40f',
             pointHoverBorderColor: '#f1c40f'
@@ -793,7 +818,9 @@ function renderAchievementsChart(items) {
       });
       if (note) note.textContent = 'No weights found; showing achievements per month.';
     }
-  });
+
+    setChartLoading(false);
+  }).catch(() => setChartLoading(false));
 }
 
 // Pin/unpin + navigation helpers

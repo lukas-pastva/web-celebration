@@ -1,3 +1,17 @@
+// ===== config & debug helpers =====
+const QS = new URLSearchParams(location.search);
+const CONFIG = {
+  DEBUG: QS.has('debug') || localStorage.getItem('wc_debug') === '1',
+  // 'eager' (current behavior), 'hover' (fetch first image on hover), 'none' (never fetch)
+  PREFETCH: (QS.get('prefetch') || localStorage.getItem('wc_prefetch') || 'eager').toLowerCase()
+};
+window.WC_CONFIG = CONFIG; // quick peek in console
+window.WC_SET = (k, v) => localStorage.setItem(k, v);
+
+function dlog(...a) { if (CONFIG.DEBUG) console.log('[WC]', ...a); }
+function tstart(label) { if (CONFIG.DEBUG) console.time(label); }
+function tend(label) { if (CONFIG.DEBUG) console.timeEnd(label); }
+
 // ===== Icons for celebrations =====
 const eventIcons = {
   birthday: 'fa-birthday-cake',
@@ -53,15 +67,11 @@ function updateThemeToggleIcon(theme) {
   const btn  = $('#themeToggle');
   if (!icon || !btn) return;
   icon.classList.remove('fa-sun', 'fa-moon');
-  if (theme === 'dark') {
-    icon.classList.add('fa-sun');  btn.setAttribute('aria-label', 'Switch to light mode');  btn.title = 'Switch to light mode';
-  } else {
-    icon.classList.add('fa-moon'); btn.setAttribute('aria-label', 'Switch to dark mode');   btn.title = 'Switch to dark mode';
-  }
+  if (theme === 'dark') { icon.classList.add('fa-sun');  btn.setAttribute('aria-label','Switch to light mode'); btn.title='Switch to light mode'; }
+  else { icon.classList.add('fa-moon'); btn.setAttribute('aria-label','Switch to dark mode'); btn.title='Switch to dark mode'; }
 }
 
 // ===== Type → color mapping =====
-// Prefer distinct, curated colors for common types. Fallback to a wide palette by hash.
 const PREFERRED_COLORS = {
   career:   '#3b82f6', // blue
   personal: '#ec4899', // pink
@@ -79,12 +89,11 @@ const PALETTE = [
   '#eab308','#ec4899','#22c55e','#a855f7','#06b6d4','#f97316',
   '#84cc16','#f43f5e','#0ea5e9','#7c3aed'
 ];
-function djb2(str) { let h = 5381; for (let i = 0; i < str.length; i++) h = ((h << 5) + h) + str.charCodeAt(i); return h >>> 0; }
+function djb2(str) { let h = 5381; for (let i = 0; i < str.length; i++) h = ((h<<5)+h)+str.charCodeAt(i); return h>>>0; }
 function colorForType(t) {
   const key = String((t || 'other')).toLowerCase();
   if (PREFERRED_COLORS[key]) return PREFERRED_COLORS[key];
-  const idx = djb2(key) % PALETTE.length;
-  return PALETTE[idx];
+  const idx = djb2(key) % PALETTE.length; return PALETTE[idx];
 }
 
 // ===== Type helpers (chips) =====
@@ -108,7 +117,6 @@ function persistChipSelection() {
   else localStorage.setItem(FILTER_KEY, JSON.stringify(Array.from(SELECTED_TYPES)));
 }
 
-// colored chip
 function makeChip(value, label) {
   const btn = document.createElement('button');
   btn.type = 'button';
@@ -174,6 +182,7 @@ function setupTypeChips(items) {
   wrap.hidden = false;
 }
 
+// filtering
 function getFilteredAchievements() {
   if (SELECTED_TYPES.has('__all')) return ALL_ACH;
   return ALL_ACH.filter(a => {
@@ -184,13 +193,18 @@ function getFilteredAchievements() {
   });
 }
 function renderFiltered() {
+  tstart('renderFiltered');
   const items = getFilteredAchievements();
   renderAchievements(items, ASSETS_BASE);
   renderAchievementsChart(items);
+  tend('renderFiltered');
 }
 
 // ===== Boot =====
 document.addEventListener('DOMContentLoaded', () => {
+  tstart('boot');
+  dlog('config:', CONFIG);
+
   // Theme
   setTheme(preferredTheme());
   on($('#themeToggle'), 'click', () => setTheme(currentTheme() === 'light' ? 'dark' : 'light'));
@@ -230,10 +244,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Load data & render
   const bust = Date.now();
-  fetch(`celebrations.yaml?t=${bust}`, { cache: 'no-store' })
+  const yamlUrl = `celebrations.yaml?t=${bust}`;
+  tstart('yaml:fetch');
+  fetch(yamlUrl, { cache: 'no-store' })
     .then(r => r.text())
     .then(yamlText => {
+      tend('yaml:fetch');
+      dlog('yaml bytes:', yamlText.length);
+
+      tstart('yaml:parse');
       const data = jsyaml.load(yamlText) || {};
+      tend('yaml:parse');
+
       const celebrations = Array.isArray(data.celebrations) ? data.celebrations : [];
       const achievements = Array.isArray(data.achievements) ? data.achievements : [];
 
@@ -248,15 +270,24 @@ document.addEventListener('DOMContentLoaded', () => {
       const intro = (typeof data.intro === 'string') ? data.intro : '';
       const introEl = $('#introText'); if (introEl && intro.trim()) introEl.innerHTML = linkify(intro);
 
+      dlog('counts:', { celebrations: celebrations.length, achievements: achievements.length });
+
       const haveCelebrations = celebrations.length > 0;
       const haveAchievements = achievements.length > 0;
-      if (haveCelebrations) renderCalendar(celebrations);
+
+      if (haveCelebrations) {
+        tstart('renderCalendar');
+        renderCalendar(celebrations);
+        tend('renderCalendar');
+      }
 
       ALL_ACH = achievements;
       ASSETS_BASE = assetsBase;
 
       if (haveAchievements) {
+        tstart('setupTypeChips');
         setupTypeChips(ALL_ACH);
+        tend('setupTypeChips');
         renderFiltered();
       }
 
@@ -265,8 +296,10 @@ document.addEventListener('DOMContentLoaded', () => {
         tabsContainer, tabCelebrations, tabAchievements,
         viewCelebrations, viewAchievements
       });
+
+      tend('boot');
     })
-    .catch(err => console.error('Error loading YAML:', err));
+    .catch(err => { tend('yaml:fetch'); console.error('Error loading YAML:', err); });
 });
 
 // ===== UI adaptation =====
@@ -364,13 +397,14 @@ function externalTooltipHandler(context) {
 
   const title = raw.title || '';
   const descHtml = linkify(raw.description || '');
-  const img = FIRST_IMG.get(raw.key) || '';
+  let img = FIRST_IMG.get(raw.key) || '';
+  el.dataset.key = raw.key;
 
   el.innerHTML = `
     <button class="ct-close" aria-label="Close tooltip">&times;</button>
     <div class="ct-head">${escapeHTML(title)}</div>
     <div class="ct-body">
-      ${img ? `<img class="ct-img" src="${img}" alt="${escapeHTML(title)}">` : `<div></div>`}
+      ${img ? `<img class="ct-img" src="${img}" alt="${escapeHTML(title)}">` : `<div class="ct-img ph"></div>`}
       <div class="ct-text">${descHtml || '<em>No description</em>'}</div>
     </div>
   `;
@@ -379,7 +413,21 @@ function externalTooltipHandler(context) {
   if (closeBtn) closeBtn.onclick = (ev) => { ev.preventDefault(); unpinTooltip(); };
 
   const imgEl = el.querySelector('.ct-img');
-  if (imgEl) { imgEl.onclick = (ev) => { ev.stopPropagation(); openGalleryForKey(raw.key); }; }
+  if (!img && CONFIG.PREFETCH !== 'none') {
+    // lazy fetch first image on hover if not already known
+    tstart('tooltip:first-image(lazy)');
+    fetchFirstImageByKey(raw.key).then(url => {
+      tend('tooltip:first-image(lazy)');
+      if (url && document.getElementById('chart-tooltip')?.dataset.key === raw.key) {
+        const node = document.querySelector('#chart-tooltip .ct-img.ph');
+        if (node) {
+          node.outerHTML = `<img class="ct-img" src="${url}" alt="${escapeHTML(title)}">`;
+        }
+      }
+    }).catch(() => tend('tooltip:first-image(lazy)'));
+  } else if (imgEl) {
+    imgEl.onclick = (ev) => { ev.stopPropagation(); openGalleryForKey(raw.key); };
+  }
 
   // Position within viewport (fixed)
   const tw = el.offsetWidth;
@@ -487,6 +535,7 @@ function starsHTML(weight) {
 }
 
 function renderAchievements(items, assetsBase) {
+  tstart(`renderAchievements (${items.length})`);
   const container = $('#achievementsList');
   if (!container) return;
   container.innerHTML = '';
@@ -497,6 +546,7 @@ function renderAchievements(items, assetsBase) {
     empty.style.fontSize = '14px';
     empty.textContent = 'No achievements match this filter.';
     container.appendChild(empty);
+    tend(`renderAchievements (${items.length})`);
     return;
   }
 
@@ -580,15 +630,19 @@ function renderAchievements(items, assetsBase) {
       placeholder.style.fontSize = '14px';
       gallery.appendChild(placeholder);
 
+      if (CONFIG.DEBUG) console.time(`gallery:${folder}`);
       fetch(manifestUrl, { cache: 'no-store' })
         .then(res => { if (!res.ok) throw new Error(`manifest ${res.status}`); return res.json(); })
         .then(json => Array.isArray(json.images) ? json.images : [])
         .catch(() => [])
         .then(async (images) => {
           if (images.length) return images;
-          try { return await listImagesInDir(dirUrl); } catch { return []; }
+          if (CONFIG.DEBUG) console.time(`autoindex:${folder}`);
+          try { return await listImagesInDir(dirUrl); }
+          finally { if (CONFIG.DEBUG) console.timeEnd(`autoindex:${folder}`); }
         })
         .then(images => {
+          if (CONFIG.DEBUG) console.timeEnd(`gallery:${folder}`);
           gallery.innerHTML = '';
           if (!images.length) {
             const empty = document.createElement('div');
@@ -602,6 +656,7 @@ function renderAchievements(items, assetsBase) {
           buildGallery(gallery, images, a.title);
         })
         .catch(err => {
+          if (CONFIG.DEBUG) console.timeEnd(`gallery:${folder}`);
           console.error('Gallery load failed:', err);
           gallery.innerHTML = '';
           const e = document.createElement('div');
@@ -614,6 +669,8 @@ function renderAchievements(items, assetsBase) {
 
     container.appendChild(card);
   });
+
+  tend(`renderAchievements (${items.length})`);
 }
 
 function buildGallery(container, imageUrls, title = 'Achievement') {
@@ -637,26 +694,40 @@ function buildGallery(container, imageUrls, title = 'Achievement') {
 
 // ===== Directory listing =====
 async function listImagesInDir(dirUrl) {
+  tstart(`fetch:autoindex ${dirUrl}`);
   const res = await fetch(dirUrl, { headers: { 'Accept': 'text/html' }, cache: 'no-store' });
+  tend(`fetch:autoindex ${dirUrl}`);
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  tstart('parse:autoindex');
   const html = await res.text();
   const doc = new DOMParser().parseFromString(html, 'text/html');
   const anchors = Array.from(doc.querySelectorAll('a'));
   const files = anchors.map(a => a.getAttribute('href') || '')
     .filter(h => h && !h.endsWith('/'))
     .filter(isImageFile);
+  tend('parse:autoindex');
   return files.map(h => new URL(h, dirUrl).toString());
 }
 function isImageFile(name) { return /\.(png|jpe?g|webp|gif|bmp|svg)$/i.test(name); }
 
 // ===== Chart (Month-resolution X; Weight 1–5 Y) =====
 function prefetchFirstImages(items, assetsBase) {
-  const tasks = items.map(a => {
+  const missing = items.filter(a => !FIRST_IMG.has(achKey(a)));
+  dlog(`prefetchFirstImages: ${missing.length} items (strategy: ${CONFIG.PREFETCH})`);
+  if (!missing.length) return Promise.resolve();
+
+  tstart(`prefetchFirstImages (${missing.length})`);
+  const tasks = missing.map(a => {
     const key = achKey(a);
-    if (FIRST_IMG.has(key)) return Promise.resolve();
-    return fetchFirstImage(a, assetsBase).then(u => { if (u) FIRST_IMG.set(key, u); });
+    if (CONFIG.DEBUG) console.time(`firstimg:${key}`);
+    return fetchFirstImage(a, assetsBase).then(u => {
+      if (u) FIRST_IMG.set(key, u);
+      if (CONFIG.DEBUG) console.timeEnd(`firstimg:${key}`);
+    }).catch(() => {
+      if (CONFIG.DEBUG) console.timeEnd(`firstimg:${key}`);
+    });
   });
-  return Promise.allSettled(tasks);
+  return Promise.allSettled(tasks).then(() => tend(`prefetchFirstImages (${missing.length})`));
 }
 function fetchFirstImage(a, assetsBase) {
   if (Array.isArray(a.images) && a.images.length) {
@@ -670,6 +741,11 @@ function fetchFirstImage(a, assetsBase) {
     .then(j => (Array.isArray(j.images) && j.images.length ? j.images[0] : null))
     .catch(() => listImagesInDir(dirUrl).then(arr => (arr[0] || null)))
     .catch(() => null);
+}
+function fetchFirstImageByKey(key) {
+  const a = MAP_ACH.get(key);
+  if (!a) return Promise.resolve(null);
+  return fetchFirstImage(a, ASSETS_BASE).then(u => { if (u) FIRST_IMG.set(key, u); return u; });
 }
 
 // fractional-year helpers for month-level axis
@@ -695,11 +771,14 @@ function renderAchievementsChart(items) {
   const canvas = document.getElementById('achievementsChart');
   const note   = document.getElementById('chartNote');
   if (!canvas) return;
-  if (achievementsChart) { achievementsChart.destroy(); achievementsChart = null; }
+
+  if (achievementsChart) { dlog('destroy previous chart'); achievementsChart.destroy(); achievementsChart = null; }
 
   setChartLoading(true);
+  tstart('chart:total');
 
-  prefetchFirstImages(items, ASSETS_BASE).finally(() => {
+  const draw = () => {
+    tstart('chart:prepare-data');
     const points = items.map(a => {
       const d = parseDDMMYYYY(a.date);
       if (!d) return null;
@@ -717,6 +796,7 @@ function renderAchievementsChart(items) {
         typeColor: colorForType(types[0] || 'other')
       };
     }).filter(Boolean);
+    tend('chart:prepare-data');
 
     const opts = {
       responsive: true,
@@ -724,34 +804,22 @@ function renderAchievementsChart(items) {
       animation: false,
       devicePixelRatio: Math.min(window.devicePixelRatio || 1, 2),
       interaction: { mode: 'nearest', intersect: true },
-      plugins: {
-        legend: { display: false },
-        tooltip: { enabled: false, external: externalTooltipHandler }
-      },
+      plugins: { legend: { display: false }, tooltip: { enabled: false, external: externalTooltipHandler } },
       scales: {
         x: {
           type: 'linear',
           title: { display: true, text: 'Month' },
-          ticks: {
-            stepSize: 1/12,
-            callback: (v) => labelFromFractionalYear(v),
-            autoSkip: true,
-            maxTicksLimit: 24
-          },
+          ticks: { stepSize: 1/12, callback: (v) => labelFromFractionalYear(v), autoSkip: true, maxTicksLimit: 24 },
           grid: { drawTicks: true }
         },
         y: { title: { display: true, text: 'Weight (1–5)' }, min: 0.5, max: 5.5, ticks: { stepSize: 1 } }
       },
-      onHover: (evt, activeEls, chart) => {
-        chart.canvas.style.cursor = (activeEls && activeEls.length) ? 'pointer' : 'default';
-      },
+      onHover: (evt, activeEls, chart) => { chart.canvas.style.cursor = (activeEls && activeEls.length) ? 'pointer' : 'default'; },
       onClick: (evt, activeEls, chart) => {
         if (!activeEls || !activeEls.length) { unpinTooltip(); return; }
         const { datasetIndex, index } = activeEls[0];
         const raw = chart.data.datasets[datasetIndex].data[index];
-
-        TOOLTIP_PINNED = true;
-        PINNED_DATA = raw;
+        TOOLTIP_PINNED = true; PINNED_DATA = raw;
 
         const rect = chart.canvas.getBoundingClientRect();
         if (!LAST_TOOLTIP_POS) {
@@ -763,12 +831,7 @@ function renderAchievementsChart(items) {
 
         externalTooltipHandler({
           chart,
-          tooltip: {
-            opacity: 1,
-            caretX: PINNED_POS.left - rect.left,
-            caretY: PINNED_POS.top - rect.top,
-            dataPoints: [{ raw }]
-          }
+          tooltip: { opacity: 1, caretX: PINNED_POS.left - rect.left, caretY: PINNED_POS.top - rect.top, dataPoints: [{ raw }] }
         });
 
         scrollToCard(raw.key);
@@ -780,6 +843,7 @@ function renderAchievementsChart(items) {
       opts.scales.x.min = Math.min(...xs) - 1/24;
       opts.scales.x.max = Math.max(...xs) + 1/24;
 
+      tstart('chart:new Chart');
       achievementsChart = new Chart(canvas, {
         type: 'scatter',
         data: {
@@ -791,7 +855,7 @@ function renderAchievementsChart(items) {
             pointHoverRadius: 13,
             hitRadius: 16,
             borderWidth: 2,
-            pointBackgroundColor: '#f1c40f',   // yellow stars
+            pointBackgroundColor: '#f1c40f',
             pointBorderColor: '#f1c40f',
             pointHoverBackgroundColor: '#f1c40f',
             pointHoverBorderColor: '#f1c40f'
@@ -799,28 +863,29 @@ function renderAchievementsChart(items) {
         },
         options: opts
       });
+      tend('chart:new Chart');
       if (note) note.textContent = 'Scatter: Month (by date) vs Weight (1–5). Hover or click a point.';
     } else {
-      const byMonth = {};
-      items.forEach(a => {
-        const d = parseDDMMYYYY(a.date);
-        if (!d) return;
-        const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
-        byMonth[key] = (byMonth[key] || 0) + 1;
-      });
-      const labels = Object.keys(byMonth).sort();
-      const counts = labels.map(k => byMonth[k]);
-
+      tstart('chart:new Chart');
       achievementsChart = new Chart(canvas, {
         type: 'bar',
-        data: { labels, datasets: [{ label: 'Achievements per Month', data: counts }] },
+        data: { labels: [], datasets: [{ label: 'Achievements', data: [] }] },
         options: opts
       });
-      if (note) note.textContent = 'No weights found; showing achievements per month.';
+      tend('chart:new Chart');
+      if (note) note.textContent = 'No weights found.';
     }
 
+    tend('chart:total');
     setChartLoading(false);
-  }).catch(() => setChartLoading(false));
+  };
+
+  if (CONFIG.PREFETCH === 'eager') {
+    prefetchFirstImages(items, ASSETS_BASE).finally(draw);
+  } else {
+    dlog('skip eager prefetch (strategy:', CONFIG.PREFETCH, ')');
+    draw();
+  }
 }
 
 // Pin/unpin + navigation helpers
